@@ -87,11 +87,28 @@ const audit = (label, focusableSelector) => page.evaluate(({ label, selector }) 
     const focusableSet = new Set(focusables);
 
     // 手型光标、且没有可聚焦的祖先 —— 电视上到不了的地方。
+    //
+    // 两个必须排除的假阳性（都踩过）：
+    //   ① cursor 会**继承**：设置页的可点击行给容器加了 cursor-pointer，行里每一层 div/span
+    //      都跟着变成手型，但它们本身不是可点区域。只认「自己引入手型」的元素，即父元素不是手型。
+    //   ② 覆盖式按钮：kit 的 Row 在整行上铺了一个绝对定位的 <button>，行容器本身不可聚焦、
+    //      但它是可达的。凡是内部有一个覆盖自己矩形（误差 8px 内）的可聚焦后代，就不算死区。
+    const sameBox = (a, b) => (
+        Math.abs(a.left - b.left) < 8 && Math.abs(a.top - b.top) < 8
+        && Math.abs(a.width - b.width) < 8 && Math.abs(a.height - b.height) < 8
+    );
     const dead = Array.from(document.querySelectorAll('body *')).filter(node => {
         if (!visible(node)) return false;
-        if (window.getComputedStyle(node).cursor !== 'pointer') return false;
+        const style = window.getComputedStyle(node);
+        if (style.cursor !== 'pointer') return false;
+        const parent = node.parentElement;
+        if (parent && window.getComputedStyle(parent).cursor === 'pointer') return false;
         if (node.closest(selector)) return false;
-        return !focusableSet.has(node);
+        if (focusableSet.has(node)) return false;
+        const own = node.getBoundingClientRect();
+        const covered = Array.from(node.querySelectorAll(selector))
+            .some(child => sameBox(own, child.getBoundingClientRect()));
+        return !covered;
     });
 
     return {

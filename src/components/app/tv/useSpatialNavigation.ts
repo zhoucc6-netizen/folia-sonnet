@@ -235,6 +235,24 @@ export const useSpatialNavigation = (): void => {
                 return;
             }
 
+            /*
+             * 遥控器的菜单键：直接切「墙 ↔ 缝」，等于补上遥控器没有的那个 Tab。
+             *
+             * Android 的 KEYCODE_MENU 在 WebView 里通常落到 `ContextMenu`；有的遥控器报 `Menu`。
+             * 两个都认。收不到也无妨 —— 走到墙的边界再按方向键照样能进缝，这只是条近路。
+             * 放在 shouldTakeOver 之前：墙上有焦点时 shouldTakeOver 是 false，而这条恰恰要在那时生效。
+             */
+            const code = effectiveKeyCode(event);
+            if ((code === 'ContextMenu' || code === 'Menu') && !isTextEntryTarget(event.target)) {
+                if (isInsideSeam()) {
+                    (document.activeElement as HTMLElement | null)?.blur();
+                } else if (!enterSeam()) {
+                    return;
+                }
+                event.preventDefault();
+                return;
+            }
+
             if (!shouldTakeOver()) return;
             if (event.altKey || event.ctrlKey || event.metaKey) return;
             if (isTextEntryTarget(event.target) || isSliderKey(event)) return;

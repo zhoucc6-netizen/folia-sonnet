@@ -80,6 +80,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "folia_transition_animation",
   "folia_transition_animation_card",
   "folia_transition_performance",
+  "folia_tv_keyboard_off",
   "follow_system_theme",
   "fume_tuning",
   "global_lyric_timeline_offset_ms",

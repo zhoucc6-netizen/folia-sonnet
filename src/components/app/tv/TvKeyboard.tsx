@@ -10,7 +10,7 @@ import { useTvKeyboardStore, type TvKeyboardTarget } from './tvKeyboardStore';
 // src/components/app/tv/TvKeyboard.tsx
 // 电视上的应用内虚拟键盘。
 //
-// 为什么需要它：安卓 WebView 聚焦 <input> 时会向系统请求输入法，而 Android TV 一般没有可用的
+// 为什么需要它：安卓 WebView 聚焦输入框时会向系统请求输入法，而 Android TV 一般没有可用的
 // 默认输入法 —— 要么什么都不弹，要么弹出一个遥控器根本操作不了的系统键盘。搜索、改歌单名、
 // 填 navidrome 地址这些全卡在这一步。
 //
