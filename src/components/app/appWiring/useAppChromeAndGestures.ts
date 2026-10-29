@@ -19,6 +19,7 @@ import { PlayerChromeVisibilityMode } from '../../../types/remoteControl';
 import { buildAppStyle } from '../presentation/buildAppStyle';
 import { buildPlayerViewFlags } from '../presentation/buildPlayerViewFlags';
 import { buildVisualizerTheme } from '../presentation/buildVisualizerTheme';
+import { useSpatialNavigation } from '../tv/useSpatialNavigation';
 import { useRef, useEffect, useCallback, useMemo } from 'react';
 
 // src/components/app/appWiring/useAppChromeAndGestures.ts
@@ -275,6 +276,8 @@ export const useAppChromeAndGestures = (model: Input) => {
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
 
     useElectronWindowChrome();
+    // 电视态的方向键空间导航。非电视设备上是空操作，见 components/app/tv/useSpatialNavigation。
+    useSpatialNavigation();
     const {
         isPlayerView,
         shouldPauseVisualizerBackground,

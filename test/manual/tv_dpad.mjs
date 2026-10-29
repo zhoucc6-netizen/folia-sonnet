@@ -1,8 +1,10 @@
 // test/manual/tv_dpad.mjs
-// 遥控器方向键的可达性探针：在电视视口里逐次发 keydown，记录焦点落在哪个元素上。
+// 遥控器方向键的可达性探针：在电视视口里逐次发方向键，记录焦点落在哪个元素上。
 //
-// 这是电视适配的核心判据 —— 焦点不动，说明这套界面在遥控器上走不通，
-// 光有焦点框没有用。每次按键都记录 activeElement 的可读标识与它是不是真的可见。
+// 分两段跑，因为导航层有「让路」规则（见 components/app/tv/useSpatialNavigation）：
+//   A. 弹窗还开着时按方向键 —— 弹窗在最上面，方向键应当归导航层，焦点要在弹窗内部走；
+//   B. 关掉弹窗、手动把焦点放到顶部标签栏 —— 已经有 DOM 焦点，方向键应当继续在控件间走。
+// 只有两段都动，才说明「遥控器点不到按钮」这件事真的解决了。
 //
 // 用法：node test/manual/tv_dpad.mjs [url]
 
@@ -33,47 +35,55 @@ page.on('pageerror', error => errors.push(error.message));
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await page.waitForTimeout(9000);
 
-// 首启的「资料库用哪种界面」还压在上面：点掉它，否则按什么键都落在对话框里。
-for (const label of ['下一步', '关闭', '我服了']) {
-    const button = page.getByRole('button', { name: label, exact: false }).first();
-    if (await button.count()) {
-        await button.click({ timeout: 3000 }).catch(() => {});
-        await page.waitForTimeout(700);
-    }
-}
-for (let i = 0; i < 3; i += 1) {
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(250);
-}
-
 const describe = () => page.evaluate(() => {
     const node = document.activeElement;
-    if (!node || node === document.body) return { tag: 'BODY', label: null, visible: false };
+    if (!node || node === document.body) return { tag: 'BODY', label: null };
     const rect = node.getBoundingClientRect();
     const style = window.getComputedStyle(node);
+    const scope = node.closest('[data-folia-keyboard-window="true"], [aria-modal="true"]');
     return {
         tag: node.tagName.toLowerCase(),
         label: (node.getAttribute('aria-label') || node.innerText || node.textContent || '')
-            .replace(/\s+/g, ' ').trim().slice(0, 40),
-        className: (node.className || '').toString().split(' ').slice(0, 3).join('.'),
-        rect: [Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height)],
-        outline: `${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor}`,
-        visible: rect.width > 0 && rect.height > 0,
+            .replace(/\s+/g, ' ').trim().slice(0, 34),
+        at: [Math.round(rect.x), Math.round(rect.y)],
+        outline: `${style.outlineWidth} ${style.outlineStyle}`,
+        inDialog: Boolean(scope),
     };
 });
 
 const trace = [];
-trace.push({ step: 'initial', ...(await describe()) });
-
-// 先按 Tab 把焦点送进页面（电视上没有 Tab，这里只是拿它当"进入界面"的等价动作）。
-await page.keyboard.press('Tab');
-await page.waitForTimeout(300);
-trace.push({ step: 'Tab', ...(await describe()) });
-
-for (const key of ['ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowUp']) {
+const press = async (phase, key) => {
     await page.keyboard.press(key);
-    await page.waitForTimeout(320);
-    trace.push({ step: key, ...(await describe()) });
+    await page.waitForTimeout(280);
+    trace.push({ phase, key, ...(await describe()) });
+};
+
+// ---- A：弹窗开着 ----
+trace.push({ phase: 'A', key: '(initial)', ...(await describe()) });
+for (const key of ['ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft']) {
+    await press('A', key);
+}
+
+// ---- B：关掉弹窗，手动给焦点 ----
+for (const label of ['下一步', '关闭', '我服了', '就这样']) {
+    const button = page.getByRole('button', { name: label, exact: false }).first();
+    if (await button.count()) {
+        await button.click({ timeout: 2000 }).catch(() => {});
+        await page.waitForTimeout(500);
+    }
+}
+await page.keyboard.press('Escape');
+await page.waitForTimeout(600);
+
+const seeded = await page.evaluate(() => {
+    const candidate = document.querySelector('nav button, header button, [role="tab"]');
+    if (!(candidate instanceof HTMLElement)) return false;
+    candidate.focus();
+    return document.activeElement === candidate;
+});
+trace.push({ phase: 'B', key: seeded ? '(seeded focus)' : '(no seed)', ...(await describe()) });
+for (const key of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowLeft']) {
+    await press('B', key);
 }
 
 await page.screenshot({ path: 'preview/tv-dpad.png' });
