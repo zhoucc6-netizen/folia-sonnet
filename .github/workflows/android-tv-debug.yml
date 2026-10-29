@@ -65,11 +65,51 @@ jobs:
       - name: Build web assets and sync to Android
         run: npm run cap:sync:android
 
+      # 固定签名：配了 secrets 就用同一把钥匙签调试包，于是后续版本能直接覆盖升级
+      # （CI 每次临时生成的调试密钥都不一样，会导致每装一次都要先卸载、数据全清）。
+      # 没配也不 fail，只是会警告，仍用 AGP 自动生成的调试密钥。
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "::warning::没配 ANDROID_KEYSTORE_BASE64 —— 本次用 CI 临时调试密钥，装到设备上要先卸载旧包"
+            exit 0
+          fi
+          echo "${KEYSTORE_BASE64}" | base64 --decode > android/folia-tv.jks
+          test -s android/folia-tv.jks || { echo "::error::keystore 解出来是空的（base64 不对？）"; exit 1; }
+          # storeFile 相对 **app 模块** 目录解析（app/build.gradle 里的 file()），所以是 ../folia-tv.jks。
+          cat > android/keystore.properties <<EOF
+          storeFile=../folia-tv.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          keytool -list -keystore android/folia-tv.jks -storepass "${KEYSTORE_PASSWORD}" -alias "${KEY_ALIAS}" >/dev/null \
+            || { echo "::error::keystore 口令或 alias 与 secrets 不符"; exit 1; }
+          echo "签名配置已写入（调试包也会用这把钥匙）"
+
       - name: Build debug APK
         working-directory: ./android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --stacktrace
+
+      - name: Report APK signer
+        # 把签名证书指纹写进日志：以后判断「这个包能不能覆盖上一个」全靠它。
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "${APKSIGNER}" verify --print-certs "$APK" | grep -i 'certificate SHA-256 digest' | head -1
+
+      - name: Remove signing material from the workspace
+        if: always()
+        run: rm -f android/folia-tv.jks android/keystore.properties
 
       - name: Verify packaged web assets
         # 与 release 同一条断言：资产没进包时 gradle 照样绿，只有装机才发现是旧界面。

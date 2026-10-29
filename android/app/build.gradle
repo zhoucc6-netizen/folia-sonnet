@@ -67,6 +67,20 @@ android {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
             }
+            /*
+             * 调试包也用同一把钥匙。
+             *
+             * CI 每次构建生成的**临时** debug 密钥都不一样，于是每个包的签名都不同 ——
+             * 装到电视上必须先卸载（应用数据也一起没了），改一次清一次数据。
+             * 配了 keystore.properties 之后调试包也走这把固定的钥匙，后续版本可以直接覆盖升级。
+             * 本地没配 keystore.properties 时不受影响，仍用 AGP 自动生成的调试密钥。
+             */
+            debug {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
         }
     }
     buildTypes {

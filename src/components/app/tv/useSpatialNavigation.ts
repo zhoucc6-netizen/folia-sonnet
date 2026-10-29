@@ -199,10 +199,8 @@ const enterSeam = (): boolean => {
     const seam = document.querySelector<HTMLElement>('[data-bravais-seam]');
     if (!seam) return false;
     const selectedTab = seam.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-    const anyControl = seam.querySelector<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-    );
-    const entry = selectedTab ?? anyControl;
+    const candidates = collectCandidates(seam);
+    const entry = (selectedTab && isReachable(selectedTab) ? selectedTab : undefined) ?? candidates[0];
     if (!entry) return false;
     entry.focus({ preventScroll: true });
     entry.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -229,9 +227,17 @@ const bootstrapDialogFocus = (): boolean => {
     const scope = resolveScope();
     if (scope === document.body) return false;
     const primary = scope.querySelector<HTMLElement>('[data-testid$="-confirm"], [data-testid$="-next"]');
-    const fallback = scope.querySelector<HTMLElement>(CANDIDATE_SELECTOR);
-    const target = primary ?? fallback;
-    if (!target || !isReachable(target)) return false;
+    /*
+     * 必须用**过滤过可达性**的候选表，不能拿 querySelector 的第一个匹配。
+     * 设置弹窗里 DOM 顺序最靠前的往往是一个隐藏面板里的输入框（零尺寸），
+     * 拿它当目标会 `isReachable` 失败然后直接 return false —— 表现就是「按确定毫无反应」。
+     */
+    const candidates = collectCandidates(scope);
+    const target = (primary && isReachable(primary) ? primary : undefined)
+        // 落到输入框上会立刻弹出我们的键盘，用户会以为界面被占了；有别的就先用别的。
+        ?? candidates.find(node => !(node instanceof HTMLInputElement) && !(node instanceof HTMLTextAreaElement))
+        ?? candidates[0];
+    if (!target) return false;
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     return true;

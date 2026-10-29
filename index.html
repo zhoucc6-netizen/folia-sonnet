@@ -3,6 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script>
+      /*
+       * 电视：把布局宽度钉成 1920，而不是跟 device-width 走。
+       *
+       * 安卓电视按 density 2.0 报，1080p 面板算出来的 CSS 视口只有 960×540（实测角标：
+       * 960×540 dpr=2）。这套界面是按桌面 1920 设计的，塞进 960 等于整体放大一倍：
+       * 控件互相压、曲库墙的缝错位、设置页看着满满当当却哪儿都点不到。
+       *
+       * 写成固定宽度后，浏览器按 960/1920 = 0.5 的比例把页面缩下来，页面重新拿回 1920 的
+       * 布局空间；而物理面板就是 1920，缩完正好 1:1 落在物理像素上，文字不会糊。
+       *
+       * 只认原生打的 `FoliaTV/1` 标记，手机、平板、桌面、浏览器一律不受影响。
+       */
+      (function () {
+        try {
+          if (!/FoliaTV\/1/.test(navigator.userAgent)) return;
+          var meta = document.querySelector('meta[name="viewport"]');
+          if (meta) meta.setAttribute('content', 'width=1920, user-scalable=no, viewport-fit=cover');
+        } catch (error) {
+          // 拿不到 meta 就算了：退回 device-width，界面挤一点但还能用。
+        }
+      })();
+    </script>
     <meta name="referrer" content="no-referrer" />
     <meta name="description" content="一个动态歌词播放器，支持 AI 主题生成" />
     <meta name="theme-color" content="#09090b" />
