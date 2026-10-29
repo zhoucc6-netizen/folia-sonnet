@@ -13,6 +13,7 @@ import { isCapacitorAndroid } from '../../../../platform/runtime';
 import { settingsCardClassFor } from '../settingsCardClasses';
 import AndroidForceLandscapeSetting from '../AndroidForceLandscapeSetting';
 import DeviceTypeSetting from '../DeviceTypeSetting';
+import TvKeyboardSetting from '../TvKeyboardSetting';
 import GlassSurfaceSetting from '../GlassSurfaceSetting';
 import LyricFlatSetting from '../LyricFlatSetting';
 import LyricsWallpaperSettingsSection from '../LyricsWallpaperSettingsSection';
@@ -92,6 +93,7 @@ const AppearancePage: React.FC = () => {
                 <LyricFlatSetting />
                 {/* 下面两项组件内部自行判断运行时：非安卓直接返回 null，这里不用再判端。 */}
                 <DeviceTypeSetting />
+                <TvKeyboardSetting />
                 <AndroidForceLandscapeSetting />
             </Group>
 

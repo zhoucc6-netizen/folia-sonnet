@@ -150,6 +150,13 @@ interface FoliaNativePlugin {
     getVideoLayerFile(): Promise<{ has?: boolean; name?: string; url?: string }>;
     /** 删掉原生那一份视频副本（设置里的「清除本地视频」）。 */
     clearVideoLayerFile(): Promise<void>;
+    /**
+     * 电视语音输入：拉起系统的语音识别界面，把识别结果带回来。
+     *
+     * `status: 'unavailable'` 表示这台设备没有可用的识别服务 —— 调用方据此把语音键藏起来，
+     * 不是当成故障。用户取消是 `cancelled`，不算错误。
+     */
+    startVoiceInput(): Promise<{ status: string; text?: string }>;
     addListener(
         eventName: 'updateDownloadProgress',
         listener: (progress: UpdateDownloadProgress) => void,
@@ -553,5 +560,41 @@ export const disposeQishuiNative = async (): Promise<void> => {
         await FoliaQishui.dispose();
     } catch (error) {
         console.warn('[FoliaQishui] dispose failed', error);
+    }
+};
+
+// ─── 电视语音输入 ───────────────────────────────────────────────────────
+
+/** 原生语音桥在不在（老包没有这个方法，浏览器里压根没有桥）。 */
+export const isNativeVoiceInputAvailable = (): boolean => (
+    isCapacitorAndroid() && typeof FoliaNative.startVoiceInput === 'function'
+);
+
+/**
+ * 一次语音识别的结果。
+ *
+ * `unavailable` 与 `cancelled` 要分开：前者是这台设备做不到（该把入口藏起来），
+ * 后者是用户自己取消了（什么都不该发生）。
+ */
+export type NativeVoiceInputResult =
+    | { status: 'ok'; text: string }
+    | { status: 'cancelled' }
+    | { status: 'unavailable' };
+
+/**
+ * 拉起系统语音识别，拿回识别出来的文字。
+ *
+ * 遥控器的语音键是系统级的，WebView 收不到，也没有可用的 Web Speech API —— 所以这条路只能走原生。
+ * 任何异常都收敛成 `unavailable`：对调用方来说「语音用不了」和「桥没注册」是同一件事。
+ */
+export const requestNativeVoiceInput = async (): Promise<NativeVoiceInputResult> => {
+    if (!isNativeVoiceInputAvailable()) return { status: 'unavailable' };
+    try {
+        const result = await FoliaNative.startVoiceInput();
+        if (result?.status === 'ok' && result.text) return { status: 'ok', text: result.text };
+        return result?.status === 'unavailable' ? { status: 'unavailable' } : { status: 'cancelled' };
+    } catch (error) {
+        console.warn('[FoliaNative] startVoiceInput failed', error);
+        return { status: 'unavailable' };
     }
 };

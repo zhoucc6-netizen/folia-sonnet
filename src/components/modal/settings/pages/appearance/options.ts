@@ -113,6 +113,10 @@ export const O = {
         noteKey: 'options.forceLandscapeDesc',
         available: isCapacitorAndroid,
     }),
+    tvKeyboardMode: option(VIEW, 'tvKeyboardMode', 'options.tvKeyboardMode', {
+        noteKey: 'options.tvKeyboardModeDesc',
+        available: isCapacitorAndroid,
+    }),
     aiProvider: option(AI, 'aiProvider', 'options.aiProvider'),
     geminiKey: option(AI, 'geminiApiKey', 'options.geminiApiKey'),
     openaiUrl: option(AI, 'openaiApiUrl', 'options.openaiApiUrl'),

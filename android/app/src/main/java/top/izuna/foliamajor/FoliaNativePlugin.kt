@@ -13,6 +13,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.util.Log
 import android.util.Base64
 import android.webkit.CookieManager
@@ -2279,6 +2280,59 @@ class FoliaNativePlugin : Plugin() {
         } catch (error: Throwable) {
             Log.w(TAG, "hiding the overlay notice failed", error)
         }
+    }
+
+    /*
+     * 电视上的语音输入：拉起系统的语音识别界面，把识别结果原样带回来。
+     *
+     * 为什么必须走原生：遥控器的语音键是系统级的，不是给 WebView 的按键事件；而 WebView 里没有
+     * 可用的 Web Speech API（安卓 WebView 不带 Google 那套语音服务）。只有 RecognizerIntent
+     * 这条路能让 App 自己拿到识别结果。
+     *
+     * 探测不到识别服务时回 `unavailable`，**不 reject**：调用方据此不显示语音键，
+     * 而不是把它当成故障。
+     *
+     * 不用 resolveActivity 判断有没有识别器：Android 11 起的包可见性会让它对着存在的 Activity
+     * 也返回 null。直接启动、接住 ActivityNotFoundException 更可靠。
+     */
+    @PluginMethod
+    fun startVoiceInput(call: PluginCall) {
+        val activity = getActivity()
+        if (activity == null) {
+            call.resolve(JSObject().put("status", "unavailable"))
+            return
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+        }
+        try {
+            startActivityForResult(call, intent, "voiceInputResult")
+        } catch (error: Throwable) {
+            Log.w(TAG, "startVoiceInput: no recognizer available", error)
+            call.resolve(JSObject().put("status", "unavailable"))
+        }
+    }
+
+    @ActivityCallback
+    fun voiceInputResult(call: PluginCall, activityResult: ActivityResult) {
+        val payload = JSObject()
+        val data = activityResult.data
+        if (activityResult.resultCode != Activity.RESULT_OK || data == null) {
+            // 用户取消、或识别界面自己关掉：不是错误，调用方什么都不做。
+            payload.put("status", "cancelled")
+            call.resolve(payload)
+            return
+        }
+        val texts = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+        val text = texts?.firstOrNull().orEmpty()
+        if (text.isEmpty()) {
+            payload.put("status", "cancelled")
+        } else {
+            payload.put("status", "ok")
+            payload.put("text", text)
+        }
+        call.resolve(payload)
     }
 
     @PluginMethod

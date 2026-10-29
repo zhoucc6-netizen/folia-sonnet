@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui';
 import { resolveDeviceType } from '../../../services/androidPhoneLayout';
 import { useDeviceProfileStore } from '../../../stores/useDeviceProfileStore';
+import { useTvKeyboardPreferenceStore } from '../../../stores/useTvKeyboardPreferenceStore';
+import { isNativeVoiceInputAvailable, requestNativeVoiceInput } from '../../../platform/foliaNative';
 import { useTvKeyboardStore, type TvKeyboardTarget } from './tvKeyboardStore';
 
 // src/components/app/tv/TvKeyboard.tsx
@@ -95,10 +97,14 @@ export const TvKeyboard: React.FC = () => {
     const close = useTvKeyboardStore(state => state.close);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const isTv = resolveDeviceType(deviceType) === 'tv';
+    /** 用户在设置里选了「用电视自己的输入法」：这一层整体让位。 */
+    const useSystemIme = useTvKeyboardPreferenceStore(state => state.useSystemIme);
+    /** 语音键：只有原生桥报得出识别服务时才出现，不摆死按钮。 */
+    const [voiceAvailable, setVoiceAvailable] = useState(isNativeVoiceInputAvailable);
 
     // 输入框一拿到焦点就接管：电视上没有可用的系统输入法。
     useEffect(() => {
-        if (!isTv || typeof document === 'undefined') return undefined;
+        if (!isTv || useSystemIme || typeof document === 'undefined') return undefined;
         const onFocusIn = (event: FocusEvent) => {
             if (suppressKeyboardOpen) return;
             const node = event.target;
@@ -113,7 +119,7 @@ export const TvKeyboard: React.FC = () => {
         };
         document.addEventListener('focusin', onFocusIn);
         return () => document.removeEventListener('focusin', onFocusIn);
-    }, [isTv, open]);
+    }, [isTv, useSystemIme, open]);
 
     // 打开时把焦点交给第一颗键，方向键才归空间导航（焦点还在输入框里的话，方向键是走光标的）。
     useEffect(() => {
@@ -147,7 +153,19 @@ export const TvKeyboard: React.FC = () => {
         return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
     }, [target, dismiss]);
 
-    if (!target) return null;
+    /** 语音键：拉起系统识别，结果直接写进同一个输入框。 */
+    const handleVoice = useCallback(async () => {
+        if (!target) return;
+        const result = await requestNativeVoiceInput();
+        if (result.status === 'ok') {
+            insertText(target, result.text);
+            return;
+        }
+        // 这台设备没有识别服务：把语音键收起来，别让用户反复按一个不工作的键。
+        if (result.status === 'unavailable') setVoiceAvailable(false);
+    }, [target]);
+
+    if (!target || useSystemIme) return null;
 
     return (
         <div
@@ -174,6 +192,13 @@ export const TvKeyboard: React.FC = () => {
                 </div>
             ))}
             <div className="flex flex-wrap justify-center gap-2">
+                {voiceAvailable && (
+                    <Key
+                        label={t('tvKeyboard.voice', '语音')}
+                        wide
+                        onPress={() => { void handleVoice(); }}
+                    />
+                )}
                 <Key label={t('tvKeyboard.space', '空格')} wide onPress={() => insertText(target, ' ')} />
                 <Key label={t('tvKeyboard.backspace', '退格')} wide onPress={() => deleteBackward(target)} />
                 <Key label={t('tvKeyboard.clear', '清空')} wide onPress={() => writeValue(target, '')} />
