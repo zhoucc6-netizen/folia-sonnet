@@ -184,6 +184,37 @@ const moveFocus = (direction: Direction): boolean => {
     return true;
 };
 
+/**
+ * 把焦点送进曲库墙的「缝」（中间那条固定控制条）。
+ *
+ * 为什么需要这一段：缝只能靠 Tab 进 —— `useBravaisKeyboard` 把 Tab 翻成 `tab` 动作，再交给
+ * `bravaisSeamFocus.resolveSeamEntry` 挑落点。遥控器上没有 Tab，缝就永远进不去，而缝里有页签、
+ * 过滤位、列表入口，进不去等于中间的界面全是死的。
+ *
+ * 用 `.bravais-seam` / `[data-bravais-seam]` 这两个稳定标记，不依赖 Tailwind 类名。落点自己挑：
+ * 先是缝里选中的那个页签（「当前在哪」那一格），再退到任意可聚焦控件 —— 与 resolveSeamEntry
+ * 的口径一致，但不把 library 那层的模块拉进电视这套代码。
+ */
+const enterSeam = (): boolean => {
+    const seam = document.querySelector<HTMLElement>('[data-bravais-seam]');
+    if (!seam) return false;
+    const selectedTab = seam.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    const anyControl = seam.querySelector<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    );
+    const entry = selectedTab ?? anyControl;
+    if (!entry) return false;
+    entry.focus({ preventScroll: true });
+    entry.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    return true;
+};
+
+/** 焦点此刻在不在曲库的缝里。 */
+const isInsideSeam = (): boolean => {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active.closest('[data-bravais-seam]') !== null;
+};
+
 /** 电视态下接管方向键。非电视设备上是空操作。 */
 export const useSpatialNavigation = (): void => {
     const deviceType = useDeviceProfileStore(state => state.deviceType);
@@ -192,8 +223,18 @@ export const useSpatialNavigation = (): void => {
     useEffect(() => {
         if (!active) return;
 
-        const handleKeyDown = (event: KeyboardEvent) => {
+        /** 捕获阶段：弹窗或已有 DOM 焦点时由我们接管，抢在曲库那几套冒泡监听前面。 */
+        const handleCapture = (event: KeyboardEvent) => {
             if (event.defaultPrevented || event.isComposing) return;
+
+            // 缝里按返回 = 退出缝、回到墙。缝自己不吃 Esc（它的 escape 阶梯里没有这一级），
+            // 不拦住的话返回键会直接当成"退一层"，把页面退掉。
+            if (effectiveKeyCode(event) === 'Escape' && isInsideSeam()) {
+                event.preventDefault();
+                (document.activeElement as HTMLElement | null)?.blur();
+                return;
+            }
+
             if (!shouldTakeOver()) return;
             if (event.altKey || event.ctrlKey || event.metaKey) return;
             if (isTextEntryTarget(event.target) || isSliderKey(event)) return;
@@ -206,8 +247,31 @@ export const useSpatialNavigation = (): void => {
             if (moveFocus(direction)) event.preventDefault();
         };
 
-        // 捕获阶段：必须早于曲库那几套冒泡监听，否则它们先 preventDefault，这里永远轮不到。
-        window.addEventListener('keydown', handleKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        /**
+         * 冒泡阶段：兜底。
+         *
+         * 曲库墙 `move` 到边界时 findAdjacentSlot 返回 null，于是 onAction 返回 false、不
+         * preventDefault —— 这一下就漏到我们这里。正好拿来当出口：走到头再按一次，焦点进缝。
+         * 没有墙的页面上（焦点还在 body）则退回普通的「从第一项开始走」，否则遥控器没有入口。
+         */
+        const handleBubble = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || event.isComposing) return;
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            if (isTextEntryTarget(event.target) || isSliderKey(event)) return;
+            const direction = DIRECTION_BY_KEY[effectiveKeyCode(event)];
+            if (!direction) return;
+            // 捕获阶段已经处理过的那一类，这里不重复处理。
+            if (shouldTakeOver()) return;
+
+            if (enterSeam() || moveFocus(direction)) event.preventDefault();
+        };
+
+        // 捕获阶段必须早于曲库那几套冒泡监听，否则它们先 preventDefault，这里永远轮不到。
+        window.addEventListener('keydown', handleCapture, { capture: true });
+        window.addEventListener('keydown', handleBubble);
+        return () => {
+            window.removeEventListener('keydown', handleCapture, { capture: true });
+            window.removeEventListener('keydown', handleBubble);
+        };
     }, [active]);
 };
