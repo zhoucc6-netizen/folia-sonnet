@@ -5,6 +5,8 @@ import { BRAVAIS_BLOCK_SHAPE, collectShapeSlots } from './bravaisWallShape';
 import { FLIP_MAX_TILES } from '../../../components/wall/flipPlan';
 import { useDevicePixelRatio } from '../../../hooks/useMediaQuery';
 import { isPortraitWall, resolveLibraryWallSeamHorizontal } from '../../../utils/libraryWallSeamDirection';
+import { resolveDeviceType } from '../../../services/androidPhoneLayout';
+import { useDeviceProfileStore } from '../../../stores/useDeviceProfileStore';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
 import { useLibraryWallLookStore } from '../../../stores/useLibraryWallLookStore';
@@ -157,7 +159,20 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
     // 竖着还是横着，按**墙面自己的实测尺寸**判（见 isPortraitWall 的注释：媒体查询在个别
     // WebView 上不派发 change，于是「自动」会一直停在横条那一支）。量到之前按横屏算。
     const portrait = view ? isPortraitWall(view.width, view.height) : false;
-    const seamHorizontal = resolveLibraryWallSeamHorizontal(seamDirection, portrait, seamDirectionReverse);
+    /*
+     * 电视上「自动」按竖缝算。
+     *
+     * 「信息条方向」默认是 自动 + 反向（横屏用横条）。这在电脑上没问题 —— 横条贴在块行之间，
+     * 上下都还有内容。但电视是 16:9 的大屏，横条会横穿画面正中、把内容切成上下两半，还占掉一整条
+     * 高度；竖缝更像电视：内容左右分开，中间一条竖的控制带。用户实测也是这个感受。
+     *
+     * 只改「自动」这一支：明确选过竖向 / 横向的人，选择照旧。
+     */
+    const deviceProfileType = useDeviceProfileStore(state => state.deviceType);
+    const isTelevision = resolveDeviceType(deviceProfileType) === 'tv';
+    const seamHorizontal = isTelevision && seamDirection === 'auto'
+        ? false
+        : resolveLibraryWallSeamHorizontal(seamDirection, portrait, seamDirectionReverse);
     // 换层编排里按层算开口时读最新的（不进回调的依赖）。
     const seamHorizontalRef = useRef(seamHorizontal);
     seamHorizontalRef.current = seamHorizontal;
