@@ -575,6 +575,15 @@ html[data-folia-device-resolved='tablet'] {
   font-size: var(--folia-ui-scale-normal, 100%);
 }
 
+/*
+ * 电视：1080p 上是 100%（等于没动），4K 电视若按 density 1.0 报出 3840 的视口，JS 会把变量
+ * 算成 200%，让**有效布局宽度**回到 1920 —— 否则同一套 rem 尺寸铺在 4K 上只有该有的一半大。
+ * 算法与判据在 services/androidPhoneLayout 的 tvViewportScaleFactor。
+ */
+html[data-folia-device-resolved='tv'] {
+  font-size: var(--folia-ui-scale-normal, 100%);
+}
+
 html[data-folia-ui-scale='compact'] {
   font-size: var(--folia-ui-scale-compact, 76%);
 }

@@ -239,6 +239,23 @@ export const resolveDeviceType = (deviceType: DeviceType | null): DeviceType => 
     deviceType ?? inferDeviceType()
 );
 
+/** 电视设计时的基准布局宽度（CSS px）。4K 电视若按 1.0 报密度，视口会是 3840，需要折算。 */
+const TV_LAYOUT_BASELINE_PX = 1920;
+
+/**
+ * 电视上报 4K 时的根字号补偿倍数（百分比）。
+ *
+ * WebView 的布局单位是 CSS px，视口宽度 = 物理宽度 / devicePixelRatio：
+ *   · Android TV 多数按 density 2.0 报，3840 折成 1920 CSS px，现有布局正好，倍数 100；
+ *   · 一部分电视按 1.0 报，直接给 3840 —— 同一套 rem 尺寸铺上去只有该有的一半大，字小到看不清。
+ *
+ * 这里按「有效布局宽度回到 1920」反推倍数（3840 -> 200%）。只在 tv 且视口真的很宽时生效，
+ * 手机、平板、桌面一律 100。
+ */
+export const tvViewportScaleFactor = (width: number): number => (
+    width >= 2560 ? Math.round((width / TV_LAYOUT_BASELINE_PX) * 100) : 100
+);
+
 /**
  * 把设备类型与「要不要缩」写到 `<html>`：样式全在 androidPhoneFit.css 里读这几个属性，
  * 组件不需要知道自己是跑在手机还是平板上。
@@ -268,7 +285,12 @@ export const applyDeviceProfile = (
     // 平板横屏本来就够宽，只有手机才需要让路。
     const landscape = isLandscapeNow();
     root.setAttribute('data-folia-ui-scale', resolved === 'phone' && landscape ? 'compact' : 'normal');
-    const scale = resolveUiScale(uiScale, deviceType);
+    // 电视在 4K 上可能按 1.0 报密度（视口 3840），这时要按比例放大根字号，见 tvViewportScaleFactor。
+    // 用户自己拉过缩放的话按比例叠上去，不整体推翻他的选择。
+    const baseScale = resolveUiScale(uiScale, deviceType);
+    const scale = resolved === 'tv'
+        ? Math.round((baseScale * tvViewportScaleFactor(window.innerWidth)) / 100)
+        : baseScale;
     root.style.setProperty('--folia-ui-scale-normal', `${scale}%`);
     root.style.setProperty('--folia-ui-scale-compact', `${compactUiScaleFor(scale)}%`);
     /*

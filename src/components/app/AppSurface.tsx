@@ -37,6 +37,7 @@ import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import WallToolsDockHost from '../wall/WallToolsDock';
+import { TvKeyboard } from './tv/TvKeyboard';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
 import AppDialogs from './dialogs/AppDialogs';
@@ -656,6 +657,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             />
             <PlaybackEntryViewPrompt theme={theme} />
             <LatticeFmNotice />
+            {/* 电视虚拟键盘：安卓电视没有可用的系统输入法，输入全靠这一层。非电视设备上不渲染。 */}
+            <TvKeyboard />
         </AppShell>
     );
 };
