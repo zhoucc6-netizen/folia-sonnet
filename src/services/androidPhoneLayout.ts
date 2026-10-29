@@ -292,12 +292,15 @@ export const applyDeviceProfile = (
     // 平板横屏本来就够宽，只有手机才需要让路。
     const landscape = isLandscapeNow();
     root.setAttribute('data-folia-ui-scale', resolved === 'phone' && landscape ? 'compact' : 'normal');
-    // 电视在 4K 上可能按 1.0 报密度（视口 3840），这时要按比例放大根字号，见 tvViewportScaleFactor。
-    // 用户自己拉过缩放的话按比例叠上去，不整体推翻他的选择。
-    const baseScale = resolveUiScale(uiScale, deviceType);
-    const scale = resolved === 'tv'
-        ? Math.round((baseScale * tvViewportScaleFactor(window.innerWidth)) / 100)
-        : baseScale;
+    /*
+     * 电视不再按 4K 视口放大根字号。
+     *
+     * 之前试过「视口 >= 2560 时放大到 200%，让有效布局宽度回到 1920」。实测在用户的电视上，
+     * 这一条和曲库墙那些按 px 算几何的部件对不上：缝（中间那条控制条）被渲染成横条压在画面中间。
+     * 根字号动的是 rem 基准，而缝的宽度/位置是 JS 用 px 算的，两边一放大一不放大就错位。
+     * 宁可让 4K 电视上的界面小一号，也不要错位。真需要放大时用设置里的「界面缩放」。
+     */
+    const scale = resolveUiScale(uiScale, deviceType);
     root.style.setProperty('--folia-ui-scale-normal', `${scale}%`);
     root.style.setProperty('--folia-ui-scale-compact', `${compactUiScaleFor(scale)}%`);
     /*

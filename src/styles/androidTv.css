@@ -29,11 +29,10 @@ html[data-folia-device-resolved='tv'] :focus {
 }
 
 /*
- * Overscan：一部分电视（尤其中低端）会把画面边缘切掉 3%~5%，1080p 下约 32~54px。
- * 这里按 5% 留边。挂在 app shell 上而不是 body 上，因为 shell 才是那个铺满整屏、
- * 内部自己滚动的容器；给 body 加内边距只会把 shell 的 100vh 顶出屏幕外。
+ * Overscan：一部分电视会把画面边缘切掉 3%~5%。
+ *
+ * 这里**不做**内边距。早先给 `[data-folia-app-shell]` 加过 `padding: 3.5vh 3.5vw`，
+ * 实测它会和按 px 算几何的部件（曲库墙的缝、若干绝对定位的浮层）打架 —— 壳体缩小了，
+ * 里面用 px 定位的东西没跟着缩，整体错位。画面边缘被切一点，比整套布局错位可接受得多；
+ * 真要避让，交给各页面自己的安全区变量。
  */
-html[data-folia-device-resolved='tv'] [data-folia-app-shell] {
-  box-sizing: border-box;
-  padding: 3.5vh 3.5vw;
-}

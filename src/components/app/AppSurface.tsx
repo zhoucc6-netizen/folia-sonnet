@@ -38,6 +38,7 @@ import PonderHost from '../ponder/PonderHost';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import { TvKeyboard } from './tv/TvKeyboard';
+import { TvDiagnosticsBadge } from './tv/TvDiagnosticsBadge';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
 import AppDialogs from './dialogs/AppDialogs';
@@ -659,6 +660,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             <LatticeFmNotice />
             {/* 电视虚拟键盘：安卓电视没有可用的系统输入法，输入全靠这一层。非电视设备上不渲染。 */}
             <TvKeyboard />
+            {/* 电视调试角标：视口/dpr/设备类型 + 最后按下的键。只读，不挡操作。 */}
+            <TvDiagnosticsBadge />
         </AppShell>
     );
 };
