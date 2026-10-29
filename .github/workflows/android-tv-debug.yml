@@ -9,10 +9,17 @@ name: Android TV Debug APK
 #   · debug 包由 AGP 用调试密钥自动签名，adb install 直接能装。
 #   · 不改 release 那条路：它还要验签名证书指纹、发 Release，不该被调试包污染。
 #
-# 触发：Actions 页手动 Run workflow。产物是 app-debug.apk，在本次运行页的 Artifacts 里下载。
+# 触发：
+#   · 推 feat/tv* —— 改完就出包，不用去 Actions 页找按钮（fork 里那个下拉框经常找不到分支）；
+#   · 手动 workflow_dispatch —— 保底入口。
+# 产物是 app-debug.apk，在该次运行页底部的 Artifacts 里下载。
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feat/tv'
+      - 'feat/tv-*'
 
 permissions:
   contents: read
