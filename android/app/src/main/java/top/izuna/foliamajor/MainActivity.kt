@@ -99,6 +99,9 @@ class MainActivity : BridgeActivity() {
     companion object {
         private const val TAG = "FoliaMainActivity"
 
+        /** 电视标记：拼进 WebView 的 UA，Web 层据此判定设备类型（见 applyWebViewPlaybackSettings）。 */
+        private const val TV_USER_AGENT_MARKER = "FoliaTV/1"
+
         /**
          * 「从别的应用打开 / 分享过来的音频」认哪些后缀：与 LocalAudioServer.isAudioFileName
          * 同源，外加 App 也能播的那几个无损格式。清单里的 intent-filter 按同一份列表注册。
@@ -350,6 +353,31 @@ class MainActivity : BridgeActivity() {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW)
         settings.setSupportZoom(false)
         settings.setBuiltInZoomControls(false)
+        /*
+         * 电视标记：往 UA 末尾加 `FoliaTV/1`。
+         *
+         * Web 层靠它判定「这是电视」。CSS 媒体查询不可靠 —— 实测这台海信电视的 WebView 既没有
+         * 报成粗指针，也没有 hover: none，于是 Web 层算出来是「平板」，整套电视适配（焦点框、
+         * overscan、方向键导航、虚拟键盘、首启跳过设备类型页）全都没启用，用户直接卡在首启。
+         *
+         * 原生这边的判据是确定的：声明了 LEANBACK / 电视特性，或者**根本没有触摸屏**
+         * （手机平板一定报 touchscreen）。UA 是同步可读的，Web 层第一次渲染就拿得到，
+         * 不需要异步桥，也不需要等 Capacitor 初始化。
+         */
+        if (isTelevisionDevice()) {
+            val userAgent = settings.userAgentString ?: ""
+            if (!userAgent.contains(TV_USER_AGENT_MARKER)) {
+                settings.userAgentString = userAgent + " " + TV_USER_AGENT_MARKER
+            }
+        }
+    }
+
+    /** 这台设备是不是电视：声明了 LEANBACK / 电视特性，或者没有触摸屏。 */
+    private fun isTelevisionDevice(): Boolean {
+        val pm = packageManager ?: return false
+        if (pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) return true
+        if (pm.hasSystemFeature("android.hardware.type.television")) return true
+        return !pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
     }
 
     /**

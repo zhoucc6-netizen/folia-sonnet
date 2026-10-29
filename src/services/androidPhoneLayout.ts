@@ -213,14 +213,21 @@ const PHONE_SHORT_EDGE_MAX_PX = 520;
  * 最需要它的人。Web / Electron 不在安卓 WebView 里，窗口多宽自己说了算，一律不缩。
  */
 /**
- * 电视的判据：没有精确指针，也没有任何触摸点。
+ * 电视的判据。
  *
- * 安卓电视的 WebView 报 `pointer: none / hover: none`，`maxTouchPoints` 是 0；
- * 手机和平板至少有一项不成立（哪怕只是外接过鼠标，`any-pointer: fine` 也会亮）。
- * 桌面浏览器与 Electron 一律有精确指针，所以这条不会把 Web 端误判成电视。
+ * 第一优先是**原生打的 UA 标记**（`FoliaTV/1`，见 MainActivity.applyWebViewPlaybackSettings）：
+ * 原生那边能直接问「有没有 LEANBACK 特性 / 有没有触摸屏」，结论确定。实测这台海信电视的
+ * WebView 既不报粗指针、也不报 hover: none，纯靠媒体查询会算成平板，整套电视适配都不启用。
+ *
+ * 媒体查询那几条留着兜底，给浏览器里手工验证电视态用（预置 folia_device_type 之外的另一条路），
+ * 也照顾那些没有原生层的场景。
  */
+const TV_USER_AGENT_MARKER = 'FoliaTV/1';
+
 const isTelevisionDevice = (): boolean => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    if (typeof window === 'undefined') return false;
+    if (typeof navigator !== 'undefined' && navigator.userAgent.includes(TV_USER_AGENT_MARKER)) return true;
+    if (typeof window.matchMedia !== 'function') return false;
     if (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) return false;
     if (window.matchMedia('(any-pointer: fine)').matches) return false;
     return window.matchMedia('(hover: none)').matches;

@@ -305,10 +305,17 @@ export const useSpatialNavigation = (): void => {
 
             if (!shouldTakeOver()) return;
             if (event.altKey || event.ctrlKey || event.metaKey) return;
-            if (isTextEntryTarget(event.target) || isSliderKey(event)) return;
+            if (isTextEntryTarget(event.target)) return;
 
             const direction = DIRECTION_BY_KEY[effectiveKeyCode(event)];
             if (!direction) return;
+
+            /*
+             * 滑条：左右留给它自己调值，上下要能把焦点带出去。
+             * 全都让给滑条的话遥控器会被困在上面 —— 首启引导里那个「界面缩放」滑条就是这样：
+             * 用户按什么都在改数值，永远走不到「下一步」，整台机器卡在首启。
+             */
+            if (isSliderKey(event) && (direction === 'left' || direction === 'right')) return;
 
             // 只有真的把焦点挪走了才吃掉这一下：没挪走说明这个方向没有可去的地方，
             // 那就让页面照常滚动，别把遥控器按死。
@@ -325,9 +332,11 @@ export const useSpatialNavigation = (): void => {
         const handleBubble = (event: KeyboardEvent) => {
             if (event.defaultPrevented || event.isComposing) return;
             if (event.altKey || event.ctrlKey || event.metaKey) return;
-            if (isTextEntryTarget(event.target) || isSliderKey(event)) return;
+            if (isTextEntryTarget(event.target)) return;
             const direction = DIRECTION_BY_KEY[effectiveKeyCode(event)];
             if (!direction) return;
+            // 与捕获阶段同一条：滑条只留左右。
+            if (isSliderKey(event) && (direction === 'left' || direction === 'right')) return;
             // 捕获阶段已经处理过的那一类，这里不重复处理。
             if (shouldTakeOver()) return;
 
