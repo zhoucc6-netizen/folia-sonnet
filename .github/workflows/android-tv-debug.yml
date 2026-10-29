@@ -1,0 +1,82 @@
+name: Android TV Debug APK
+
+# 电视端调试包的出包口。
+#
+# 为什么单独一支 workflow，而不是复用 android-release.yml：
+#   · release 包的签名是可选的 —— 没配 keystore secrets 时打出来的是**未签名**包，
+#     装不上真机/电视（INSTALL_PARSE_FAILED_NO_CERTIFICATES）。电视适配阶段每次都去
+#     管 keystore 是纯粹的摩擦。
+#   · debug 包由 AGP 用调试密钥自动签名，adb install 直接能装。
+#   · 不改 release 那条路：它还要验签名证书指纹、发 Release，不该被调试包污染。
+#
+# 触发：Actions 页手动 Run workflow。产物是 app-debug.apk，在本次运行页的 Artifacts 里下载。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      # 这棵树的 vite 构建在默认堆上限下偶发 OOM（CI runner 7GB）。
+      NODE_OPTIONS: --max-old-space-size=6144
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-ubuntu-latest-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Capacitor 8 的 android 库以 source/target 21 编译，JDK 17 会报「无效的源发行版：21」。
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # 一条命令两件事：vite build（FOLIA_BUILD_TARGET=capacitor）+ cap sync android。
+      # 只 build 不同步，打进包里的还是上一版前端。
+      - name: Build web assets and sync to Android
+        run: npm run cap:sync:android
+
+      - name: Build debug APK
+        working-directory: ./android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Verify packaged web assets
+        # 与 release 同一条断言：资产没进包时 gradle 照样绿，只有装机才发现是旧界面。
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK" || { echo "没有产出 APK"; exit 1; }
+          unzip -l "$APK" | grep -qE "assets/public/index\.html" \
+            || { echo "Web 产物没进包 —— 大概率是 cap sync 没跑"; exit 1; }
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-tv-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
