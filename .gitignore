@@ -1,0 +1,154 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+.env*.local
+
+dev-dist/
+example/
+release/
+packaging/aur/folia-major-bin/FIRST_RELEASE.md
+packaging/aur/folia-major-bin/README.md
+.codex
+.codex-tmp
+.wrangler/tmp
+wrangler.local.toml
+
+test/test-song/*
+test/test-ReplayGain
+impl.md
+test-results/
+.dev-credentials/
+.codex-remote-attachments
+test/manual/lyric-output/*
+test/manual/lyric-audit-output/*    
+deploy/docker/.env
+deploy/docker/data/
+.agents/
+skills-lock.json
+TODO.MD
+commit.md
+.codebuff-ai/reasson/conf.jsonc
+scripts/*
+!scripts/generate-android-assets.mjs
+docs/TODO.md
+design/
+plan/
+
+# Model weights: fetched and hash-verified by build/fetchModels.mjs, shipped in the installer,
+# never committed - 83MB that never changes does not belong in every clone's history.
+models/
+build/windowtolayer
+build/windowtolayer-COPYING
+build/ffmpeg/
+build/koffi/
+build/mac-helper/
+# MNN runtime library (build/buildMnnRuntime.mjs): the pinned source, its build tree, and the result.
+build/mnn/
+build/.mnn-src/
+build/.mnn-build/
+# The transcode fallback's dev slot: same binary as build/ffmpeg/<os>-<arch>, staged here so
+# `npm run dev:electron` runs the audio-only runtime the release ships instead of system PATH.
+# `ffmpeg-8.1.2/` is the mod exporters' slot and is a full build the developer supplies.
+ffmpeg-audio/
+ffmpeg-8.1.2/
+.windowtolayer-src/
+# Local reference clone of upstream main used for pollution review; never ship.
+original/
+# Local upstream implementation references used during investigation; never ship.
+reference/
+# Optional developer override for FFmpeg; packaged builds fetch their pinned runtime.
+# Local hand-made zip bundles of mods (drag-drop install test files); never ship.
+mods/*.zip
+
+
+# Built by packaging/windows/build-wallpaper-helper.mjs (Windows wallpaper mode helper).
+build/folia-wallpaper-helper.exe
+packaging/windows/wallpaper-helper/target/
+
+# Local Rust Spout sender build artifacts.
+build/folia-spout-sender.exe
+packaging/windows/spout-sender/target/
+
+# Python bytecode from the htdemucs runner, written beside it by the downloaded runtime.
+__pycache__/
+
+# Built by build/buildPythonRuntime.mjs - binary artifacts that live on the mirrors, not in git.
+dist-runtime/
+keystore.properties
+*.jks
+*.keystore
+
+# ---- 本机产物与本地状态（不进仓库）----
+# 出包脚本的产物（build-apk.sh 每次都会重写，进仓库只会让 diff 永远脏）。
+*.apk
+*.aab
+# Gradle 用户目录：build-apk.sh 可能在 android/ 下留一份缓存，几百 MB。
+android/.gradle-home*/
+.gradle-home*/
+# 本地登录态（QQ 设备授权等）。
+.auth-state/
+# WorkBuddy 在本项目的工作数据（会话记忆、一次性脚本产物）。
+.workbuddy/
+# 仓库内的一次性校验脚本（悬空 import 检查等），只在本机跑，不必进仓库。
+.tools/
+
+# ---- 本机开发产物 ----
+# test/render/preview.mjs 的截图与本机布局自检报告，不进仓库。
+preview/
+# 上面这条按目录名忽略，会顺带吃掉源码里的 preview 目录（src/components/visualizer/preview/，
+# 是预览时钟与实时内容那些模块）。只放行源码下的那一处，别的地方照旧忽略。
+!/src/**/preview/
+# 单测覆盖率与 Playwright 的默认输出目录。
+coverage/
+playwright-report/
+blob-report/
+# tsc 增量编译缓存。
+*.tsbuildinfo
+# Vite 的依赖预构建缓存（不总是落在 node_modules 下）。
+.vite/
+
+# ---- Android / Gradle 本地产物 ----
+# Gradle 用户目录与根工程的构建输出；android/app/.gitignore 只管 app 模块。
+android/.gradle/
+android/build/
+android/local.properties
+android/captures/
+android/.cxx/
+# Capacitor sync 每次重写的 Web 资源与插件清单。
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+
+# ---- 本地配置与环境变量 ----
+# 只提交示例文件，其余 .env* 都是本机配置（含密钥）。
+.env
+.env.*
+!.env.example
+# git-filter-branch 的工作目录，历史重写留下的临时状态。
+.git-rewrite/
+# AI 工具的本地规则与状态：规则只有 AGENTS.md 一份，工具各自的配置不再进仓库。
+.gemini/
+.claude/settings.local.json

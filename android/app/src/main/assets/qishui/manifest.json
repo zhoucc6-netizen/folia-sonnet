@@ -1,0 +1,8 @@
+{
+  "protocols": [
+    "luna-car",
+    "passport-web"
+  ],
+  "defaultProtocol": "luna-car",
+  "version": 3
+}

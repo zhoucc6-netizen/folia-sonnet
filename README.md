@@ -1,0 +1,107 @@
+# Folia-Sonnet
+
+将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.21** 正式版。
+
+> [!IMPORTANT]  
+> **装上去就能用，不需要自建后端。**
+>
+> 本版本已内置**本地登录**：网易云、QQ 音乐（QQ 扫码与微信扫码）、酷狗的接口代码都打进了包里，  
+> 由 Android 原生桥（OkHttp + 系统 Cookie 罐）直接代发请求。扫码登录后，搜索、歌单、歌词、封面、  
+> 播放地址全部由 App 自己向官方服务器取，**不经过任何第三方中转服务器**。
+>
+> 源码本身不含任何内置的第三方后端地址。未配置可选的 AI 主题服务时，只有 AI 主题生成与少量歌词  
+> 代理不可用，听歌、歌词、封面、本地音乐等其余功能不受影响。
+
+## 项目简介
+
+Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器，支持网易云、QQ 音乐、酷狗、汽水音乐、Navidrome  
+与本地音乐库，通过智能歌词匹配、AI 生成配色主题以及多种全屏歌词动画提供独特的听歌体验。
+
+这个仓库做的是同一套 Web 代码的 Android 容器（Capacitor），并补齐移动 / 壁纸场景才需要的那部分：
+
+| 模块        | 说明                                                                 |
+| --------- | ------------------------------------------------------------------ |
+| 本地登录      | 内置接口代码 + 原生桥，扫码登录三家平台，不依赖任何自建后端。                                   |
+| 动态歌词壁纸    | 可作为系统动态壁纸运行；「跟随」模式下壁纸画的就是播放页那套可视化。背景支持模糊封面 / 主题色 / 自选图片 / 自选视频。    |
+| 可视化叠层     | 壁纸之上的一层 WebView，跑的是播放页同一个渲染器，画面与播放页一致。                             |
+| 音乐锁屏      | 锁屏界面上也挂同一层叠层，与桌面叠层完全一致；底部控制条自上有退出（ˇ）/ 封面 / 歌名 / 进度条 / 上一首·播放暂停·下一首，也可设成「只在锁屏上出现」。 |
+| 原生锁屏歌词    | ColorOS 16+ 上把歌词写进 `MediaMetadata["lyricInfo"]`，交给系统锁屏 / AOD 原生渲染。 |
+| 手机适配      | 竖屏 / 横屏的紧凑布局，全部由 `<html data-folia-phone-fit>` 门控，关闭时桌面布局一字不变。     |
+| 刘海 / 挖孔适配 | 清掉系统垫给 decor 的 cutout padding，沉浸式下不再留黑边。                           |
+| 状态栏歌词     | 与 Lyricon 同步：换歌、播放暂停、拖动跳变、转屏等事件推送，段内推进归原生。                         |
+| 前台播放      | 前台服务 + 媒体通知，通知栏 / 锁屏 / 耳机按键的控制回到 App。                              |
+| 播放时保持常亮   | 可选开关：只在播放中钉住屏幕，暂停 / 退到后台立刻交还给系统。                                   |
+
+上游 Folia 本身具备的能力：
+
+| 模块             | 说明                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| 在线搜索与播放        | 搜索歌曲、歌手或专辑后即可播放，并自动加载相关封面与歌词。                                                              |
+| 本地音乐支持         | 可导入本地音频文件，在本地保存索引信息，不上传文件内容。                                                               |
+| 智能歌词匹配         | 本地歌曲可自动匹配在线歌词与封面，也支持手动修正匹配结果。                                                              |
+| 本地歌词文件识别       | 自动加载同目录同名 `.lrc`、`.vtt`、`.ttml`、`.qrc`、`.yrc`、`.krc` 歌词文件，或内嵌 LRC 歌词；适配 LDDC 生成的增强型逐字歌词格式。 |
+| Now Playing 接入 | 通过本机 [Now Playing](https://github.com/Widdit/now-playing-service/) 服务接入外部播放器的歌曲、时间轴与歌词信息。  |
+| AI 主题生成        | 基于歌曲情绪与歌词内容生成沉浸式背景与视觉参数。                                                                   |
+| 多端体验           | 提供 Web 部署方式，同时支持桌面端打包分发。                                                                   |
+| 模组系统（实验性）      | 桌面版可通过 Folium 模组添加歌词动画、背景、播放页图层、命令等，详见 [模组开发与贡献指南](docs/folium/contributing.md)。           |
+
+## 参考项目
+
+本仓库站在这些项目之上，按来源分别对应上游主线、Web 版本、原生歌词协议、移动端适配参考，以及 Android 上 YouTube Music 登录那一套的移植出处：
+
+| 项目                                                                                                | 关系                                                                              |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [chthollyphile/folia-major](https://github.com/chthollyphile/folia-major)                         | Folia 主线仓库。本仓库的 Web 代码跟随它演进，当前对应 **0.7.21**。                                    |
+| [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)                       | Folia 的 Web / 桌面版本，本仓库 fork 自它，Android 容器是在它的代码外面加的一层壳。                         |
+| [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)                   | 在 Folia 主线基础上新增「汽水音乐」在线音源。本仓库的汽水音乐协议层、Electron 签名宿主与音频解密均来自该项目。 |
+| [Andrea-lyz/ColorOS-Live-Lyrics-Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) | ColorOS 原生锁屏歌词（「媒体与播放」歌词页）的桥接协议参考。原生锁屏歌词那部分按它的协议写 `MediaMetadata["lyricInfo"]`。 |
+| [RemnantCloudGodofWar/folia-android](https://github.com/RemnantCloudGodofWar/folia-android)       | 同为 Folia 的 Android 化尝试，手机适配（紧凑布局、竖屏 / 横屏）与 AI 主题等做法参考了它。                        |
+| [EasonLai96/folia-major](https://github.com/EasonLai96/folia-major)                               | Android 上 YouTube Music 的真账号登录整套来自它的 [`android-v23`](https://github.com/EasonLai96/folia-major/releases/tag/android-v23) 版本：原生登录 Activity、Android Keystore 加密的会话持久化、secure-only Cookie 的签名与 canonical Origin 修复，以及 BotGuard poToken 加整首下载的音频路线。 |
+
+## Android 上的 YouTube Music
+
+桌面端那几家的登录在本机能做的事，手机上不一定成立；YouTube Music 这一家现在是手机上的独一份：
+
+- 登录只能走 Google 的 cookie（YouTube 没给 YouTube Music 的 OAuth），所以由原生的一座登录 Activity（`android/app` 的 `YtmSignInActivity.java`）装自己的 WebView，登录完把 cookie 交回来。
+- **必须登录才可用**：我们不提供访客模式。会话验证过真账号才落盘，落盘由原生侧用 Android Keystore 的 AES-GCM 密钥加密（`YtmSessionStore.java`）；冷启动先读回来、问过 YouTube 确认还有效才放行。
+- 手机上行得通的：搜索、歌词、专辑、歌手、公开歌单与电台（`mix`）、播放（BotGuard 来源证明令牌 + 整首下载进缓存目录）。
+- 手机上**不支持**的：个人曲库、推荐 / 用户专辑、收藏与歌单增删、歌曲的红心。这些在界面上会直接说不支持，不返回一个空列表假装没有。
+- 已知限制：Google 可能拒绝「嵌在 App 里的浏览器」登录（页面会显示 Google 自己的提示），那种情况下没有别的退路。各处第三方协议来源记在 [`src/services/onlineMusic/UPSTREAMS.md`](src/services/onlineMusic/UPSTREAMS.md)。
+
+## 汽水音乐音源
+
+本项目额外接入了[2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)实现的「汽水音乐」在线音源，能力与网易云、QQ 音乐、酷狗、波点并列：
+
+- 搜索、歌单、专辑、歌手、播放、歌词、扫码登录、我的喜欢、歌单收藏。
+- 封面右下角会显示汽水音乐 App 图标；「全部平台」合并视图也会把它算进去。
+- 桌面端通过 Electron 主进程内的隐藏窗口调用汽水官方签名组件（`bdms.node` / `metasecml.dll`）生成请求签名；加密音频由本机 `127.0.0.1` 随机端口代理解密后交给播放器。
+- **Android 端暂不可用**：汽水音乐的签名依赖 Windows 原生模块，Android 容器没有等效环境；在手机上选择「汽水音乐」会显示「需要桌面应用」。
+
+> 注意：`electron/qishui/qishui-auth-v6/` 下的 `bdms.node` 与 `metasecml.dll` 来自汽水音乐官方客户端的 Web 安全组件，仅用于生成请求签名；它们随 folia-qishui 仓库以 AGPL-3.0 分发，版权归字节跳动与汽水音乐所有。
+
+## 范围与限制
+
+- Android 容器基于 Capacitor。不承诺本地音乐扫描、Android Auto 或应用商店发布支持。
+- 音乐锁屏注册的是真正的锁屏页面（Activity），部分 ROM 会拦「后台弹出界面」，需要在系统设置里  
+  给本应用开「锁屏显示」；那种机型上该项无效。
+- 原生锁屏歌词只在 ColorOS 16+ 上生效，由 ROM 决定是否渲染，别的机型上是空操作。
+- 本仓库是非官方实验项目，不保证跟随 Folia-major 主仓库更新；请自行 fork、审计并维护你的副本。
+- 在线音乐、歌词、封面及其他第三方内容的版权归相应权利人所有。请遵守所在地法律及服务条款，并通过官方渠道支持正版内容。
+
+## 贡献者
+
+感谢所有为本项目进行 Issue 提交、Bug 报告、想法建议、测试与代码编写的贡献者，均依据 all-contributors 规范进行统计
+
+由于列表过长，贡献记录请见 [贡献者名单](CONTRIBUTORS.md)。
+
+## 法律与免责声明
+
+本项目在 AI 的广泛协助下开发，因此仍可能存在细微或不易察觉的问题。若给你带来不便，敬请理解。
+
+本项目主要用于展示播放动效、界面设计与相关工程实现。本仓库及其源代码仅供个人学习、技术交流与非营利测试使用，请勿将其用于商业盈利用途。
+
+请始终尊重数字版权，并在条件允许时通过官方平台支持正版音乐。
+
+## 许可证
+
+本项目基于 [AGPL-3.0](LICENSE) 许可证开源。使用、修改或分发前请阅读许可证全文。

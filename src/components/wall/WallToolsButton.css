@@ -1,0 +1,654 @@
+/* src/components/wall/WallToolsButton.css — 墙面右下角工具按钮与锚定玻璃面板（WallToolsButton），Lattice 与 bravais 共用。
+   原来是 components/app/lattice/LatticeFocusButton.css，整份搬来，类名沿用 .lattice-tools*（测试与 Ponder 依赖它们）。
+   紧凑档：面板 296px、行 38px、快捷格 40px 纯图标。 */
+
+.lattice-tools {
+    /* 面板与上方队列浮岛共用的宽度：两块玻璃左右对齐。 */
+    --wall-tools-panel-width: min(296px, calc(100vw - 32px));
+    /* stack 顶部要让出的高度：Electron 自绘标题栏（AppShell 顶上那条 h-8 = 32px，z-[9999]、可拖拽区，会压住并吃掉
+       浮岛头部按钮的点击）+ 16px 间距。标题栏高度没有现成的 CSS 变量，这里写死并与 AppShell 的 h-8 对应；
+       浏览器与壁纸模式没有标题栏，多留 32px 无妨。 */
+    --wall-tools-top-reserve: 48px;
+    /* 面板里除帮助列表（ul）以外的高度上限（快捷排、音量、两面墙各自的条目、叠色、灯光行、帮助区的边距与 ul 外的间隔），
+       浮岛打开时给帮助列表算预算用；两面墙都是「小标题 + 一行」，Lattice 实测 267px，留些余量。 */
+    --wall-tools-panel-chrome: 300px;
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    z-index: 30;
+    color: var(--text-primary, #f7f4ee);
+}
+
+/* App 的 dock（WallToolsDock）不接指针，只有按钮与面板接（翻牌交接时两面墙共用这一颗）。 */
+.wall-tools-dock .lattice-tools { pointer-events: auto; }
+
+/* 按钮上方的一列：面板与队列浮岛在里面，从下往上排（column-reverse：DOM 里面板在前、浮岛在后，Tab 顺序是
+   面板 → 浮岛 → 按钮，视觉上浮岛在面板上方）；定位在这一层，面板自己不 absolute。
+   max-height 是按钮上方到窗口顶的距离，顶上让出 --wall-tools-top-reserve（标题栏 + 间距）：窗口矮时只压缩浮岛
+   （它 flex-shrink、最小 112px），面板不缩；浮岛压到最小还放不下时由帮助列表让（见文件末尾的预算）。
+   --wall-tools-bottom 是按钮此刻的底距（WallToolsSurface 随底栏抬升量写到根节点上）。 */
+.lattice-tools-stack {
+    position: absolute;
+    right: 0;
+    bottom: 64px;
+    display: flex;
+    max-height: calc(100vh - var(--wall-tools-bottom, 24px) - 64px - var(--wall-tools-top-reserve));
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+/* 按钮上方还有一样东西（`above`，Lattice 的定位按钮：40px 高）时，二者排成一列，与集合页的右下角一样；
+   面板与浮岛整体上移它的高度和 12px 间距。 */
+.lattice-tools.has-above {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.lattice-tools.has-above .lattice-tools-stack {
+    bottom: 116px;
+    max-height: calc(100vh - var(--wall-tools-bottom, 24px) - 116px - var(--wall-tools-top-reserve));
+}
+
+.lattice-tools-panel {
+    display: flex;
+    /* 可压缩 + 自己滚。
+     *
+     * 原来是 flex: none + overflow: hidden：内容比可用高度高时面板一点不缩，而 stack 是
+     * column-reverse 定位、只给了 max-height 却没有 overflow，于是多出来的那截往**屏幕上方**溢出 ——
+     * 面板顶部那排快捷格（最常用的那一排按钮）整块跑到可视区外面，怎么点都点不到。
+     * 「右下角工具面板里的按钮在屏幕外面」就是这么来的，而且只在矮屏（手机横屏）才露出来。
+     *
+     * 改成可压缩 + 内部滚动之后，面板自己的高度有界（下面那条 max-height 与 stack 的预算同源），
+     * 无论窗口多矮都只会就地滚，不会把任何一行推到屏幕外。窗口够高时两者都不生效，观感不变。 */
+    flex: 0 1 auto;
+    min-height: 0;
+    width: var(--wall-tools-panel-width);
+    max-height: calc(100vh - var(--wall-tools-bottom, 24px) - 64px - var(--wall-tools-top-reserve));
+    max-height: calc(100dvh - var(--wall-tools-bottom, 24px) - 64px - var(--wall-tools-top-reserve));
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px;
+    /* 横向维持原先的裁剪（描边、悬停底色都不会漏出去），纵向交给自己滚。 */
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 24px;
+    background: rgb(0 0 0 / 40%);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+    backdrop-filter: blur(24px);
+}
+
+.lattice-tools.is-daylight .lattice-tools-panel {
+    border-color: rgb(0 0 0 / 7%);
+    background: rgb(255 255 255 / 62%);
+    box-shadow: 0 24px 64px rgb(42 35 27 / 18%);
+}
+
+.lattice-tools-action {
+    display: flex;
+    width: 100%;
+    min-height: 38px;
+    align-items: center;
+    gap: 11px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.lattice-tools-action:hover,
+.lattice-tools-action:focus-visible {
+    background: rgb(255 255 255 / 10%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-action:hover,
+.lattice-tools.is-daylight .lattice-tools-action:focus-visible {
+    background: rgb(0 0 0 / 7%);
+}
+
+.lattice-tools-action:focus-visible,
+.lattice-tools button:focus-visible {
+    outline: 2px solid var(--text-accent, currentColor);
+    outline-offset: 2px;
+}
+
+.lattice-tools-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.lattice-tools-action:disabled:hover { background: transparent; }
+.lattice-tools-action svg { width: 17px; height: 17px; flex: 0 0 auto; }
+
+.lattice-tools-action kbd {
+    margin-left: auto;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.42;
+}
+
+/* 条目右侧的当前值（bravais 的透光档位）：与快捷键同位置，但不是按键，所以不画框。 */
+.lattice-tools-value {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+.lattice-tools-toggle {
+    width: 30px;
+    height: 18px;
+    margin-left: auto;
+    padding: 2px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    opacity: 0.42;
+    transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.lattice-tools-toggle > span {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: transform 160ms ease;
+}
+
+.lattice-tools-toggle.is-on {
+    background: var(--text-accent, currentColor);
+    opacity: 1;
+}
+
+/* 强调色上的旋钮 / 文字用主题底色：缺省主题的强调色就是正文色，用正文色会白底白字。
+   现在读 --text-on-accent（buildAppStyle 从底色与正文色里挑与强调色对比度更高的那个：日光缺省主题里底色画在橙色上
+   只有约 3.3:1，那时取正文色）；没有这个变量的地方退回底色。 */
+.lattice-tools-toggle.is-on > span {
+    color: var(--text-on-accent, var(--bg-color, #09090b));
+    transform: translateX(12px);
+}
+
+.lattice-tools-help-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgb(255 255 255 / 10%);
+}
+
+.lattice-tools-lights-toggle {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    border-radius: 999px;
+    color: inherit;
+    background: rgb(255 255 255 / 6%);
+    cursor: pointer;
+}
+
+.lattice-tools-lights-toggle span {
+    min-width: 44px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    color: color-mix(in srgb, currentColor 58%, transparent);
+    font-size: 10.5px;
+    font-weight: 650;
+    text-align: center;
+    transition: color 160ms ease, background-color 160ms ease;
+}
+
+.lattice-tools-lights-toggle span.is-active {
+    color: var(--text-on-accent, var(--bg-color, #09090b));
+    background: var(--text-accent, currentColor);
+}
+
+.lattice-tools.is-daylight .lattice-tools-lights-toggle {
+    background: rgb(0 0 0 / 5%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-help-section {
+    border-top-color: rgb(0 0 0 / 9%);
+}
+
+.lattice-tools-help-trigger {
+    width: 32px;
+    min-height: 32px;
+    justify-content: center;
+    align-self: flex-end;
+    padding: 0;
+}
+
+.lattice-tools-help {
+    flex-basis: 100%;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.lattice-tools-help ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    padding: 7px 12px;
+    border-radius: 14px;
+    background: rgb(255 255 255 / 6%);
+    list-style: none;
+}
+
+.lattice-tools.is-daylight .lattice-tools-help ul {
+    background: rgb(0 0 0 / 5%);
+}
+
+.lattice-tools-help li {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: color-mix(in srgb, currentColor 76%, transparent);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.lattice-tools-help li + li {
+    border-top: 1px solid rgb(255 255 255 / 7%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-help li + li {
+    border-top-color: rgb(0 0 0 / 6%);
+}
+
+.lattice-tools-help li > span:first-child {
+    min-width: 0;
+}
+
+.lattice-tools-help li > kbd,
+.lattice-tools-help-key kbd {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    border: 1px solid color-mix(in srgb, currentColor 36%, transparent);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.lattice-tools-help-key {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+}
+
+/* —— 快捷排、音量滑条、分组小标题（两面墙都有）—— */
+
+/* 顶部一排纯图标快捷格：固定 6 列（缺的格子跳过，剩下的靠左），名字与按键在 title / aria 里，悬停与条目同一种底。 */
+.lattice-tools-quick {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.lattice-tools-quick-action {
+    display: grid;
+    min-width: 0;
+    height: 40px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: rgb(255 255 255 / 6%);
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.lattice-tools-quick-action:hover,
+.lattice-tools-quick-action:focus-visible {
+    background: rgb(255 255 255 / 13%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-quick-action { background: rgb(0 0 0 / 5%); }
+.lattice-tools.is-daylight .lattice-tools-quick-action:hover,
+.lattice-tools.is-daylight .lattice-tools-quick-action:focus-visible { background: rgb(0 0 0 / 10%); }
+
+.lattice-tools-quick-action svg { width: 18px; height: 18px; flex: 0 0 auto; }
+
+.lattice-tools-quick-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.lattice-tools-quick-action:disabled:hover { background: rgb(255 255 255 / 6%); }
+.lattice-tools.is-daylight .lattice-tools-quick-action:disabled:hover { background: rgb(0 0 0 / 5%); }
+
+/* 进行中（生成主题）：强调色图标轻轻呼吸。 */
+.lattice-tools-quick-action.is-busy { opacity: 1; }
+.lattice-tools-quick-action.is-busy svg {
+    color: var(--text-accent, currentColor);
+    animation: lattice-tools-busy 1.4s ease-in-out infinite;
+}
+
+@keyframes lattice-tools-busy {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lattice-tools-quick-action.is-busy svg { animation: none; }
+}
+
+/* 滑条一行（音量）：左侧图标（可点：静音）、轨道、右侧数值，一块浅底。 */
+.lattice-tools-slider {
+    display: flex;
+    min-height: 38px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 0 4px;
+    border-radius: 12px;
+    background: rgb(255 255 255 / 6%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-slider { background: rgb(0 0 0 / 5%); }
+
+.lattice-tools-slider-icon {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+}
+
+button.lattice-tools-slider-icon { cursor: pointer; transition: background-color 160ms ease; }
+button.lattice-tools-slider-icon:hover { background: rgb(255 255 255 / 10%); }
+.lattice-tools.is-daylight button.lattice-tools-slider-icon:hover { background: rgb(0 0 0 / 7%); }
+.lattice-tools-slider-icon svg { width: 17px; height: 17px; }
+button.lattice-tools-slider-icon[aria-pressed="true"] { color: var(--text-accent, currentColor); }
+
+.lattice-tools-slider input[type="range"] {
+    --wall-tools-slider-track: color-mix(in srgb, currentColor 18%, transparent);
+    min-width: 0;
+    height: 22px;
+    flex: 1 1 auto;
+    margin: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    appearance: none;
+}
+
+.lattice-tools-slider input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right,
+        var(--text-accent, currentColor) var(--wall-tools-slider-fill, 0%),
+        var(--wall-tools-slider-track) var(--wall-tools-slider-fill, 0%));
+}
+
+.lattice-tools-slider input[type="range"]::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--text-primary, #f7f4ee);
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 22%), 0 2px 6px rgb(0 0 0 / 30%);
+    appearance: none;
+    transition: transform 120ms ease;
+}
+
+.lattice-tools-slider input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.18); }
+
+.lattice-tools-slider input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--wall-tools-slider-track);
+}
+
+.lattice-tools-slider input[type="range"]::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--text-accent, currentColor);
+}
+
+.lattice-tools-slider input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--text-primary, #f7f4ee);
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 22%), 0 2px 6px rgb(0 0 0 / 30%);
+}
+
+.lattice-tools-slider input[type="range"]:focus-visible {
+    border-radius: 6px;
+    outline: 2px solid var(--text-accent, currentColor);
+    outline-offset: 3px;
+}
+
+.lattice-tools-slider-value {
+    width: 38px;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    opacity: 0.66;
+    text-align: right;
+}
+
+/* 分组小标题：一道发丝线 + 小号字，之后的几行属于它。 */
+.lattice-tools-heading {
+    margin-top: 4px;
+    padding: 7px 12px 1px;
+    border-top: 1px solid rgb(255 255 255 / 10%);
+    color: color-mix(in srgb, currentColor 52%, transparent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.lattice-tools.is-daylight .lattice-tools-heading { border-top-color: rgb(0 0 0 / 9%); }
+
+/* 带快捷动作的面板更高：帮助展开时只让帮助列表自己滚，面板不顶出窗口。 */
+.lattice-tools-panel.has-quick-actions .lattice-tools-help ul {
+    max-height: max(150px, calc(100vh - 600px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* 队列浮岛也开着时，帮助列表的预算把浮岛算进去：stack 的高度上限减去面板其余部分、间隔与浮岛的最小高度（112px），
+   剩下的才给帮助列表。窗口够高时仍是上面那条上限；不够时先压浮岛（flex-shrink 到 112px），再压帮助列表，
+   保证帮助展开 + 浮岛打开时整体不出视口（帮助列表最少留 48px，窗口再矮就只能让它自己滚）。 */
+.lattice-tools-stack.has-queue-island .lattice-tools-panel.has-quick-actions .lattice-tools-help ul {
+    max-height: min(
+        max(150px, calc(100vh - 600px)),
+        max(48px, calc(100vh - var(--wall-tools-bottom, 24px) - 64px - var(--wall-tools-top-reserve)
+            - var(--wall-tools-panel-chrome) - 8px - 112px))
+    );
+}
+
+@media (max-width: 640px) {
+    .lattice-tools { right: 16px; bottom: 16px; }
+}
+
+/* 矮窗口（手机横屏就是这样：宽 800+、高只有 390 左右）单独一档。
+ *
+ * 上面那条只看宽度，而横屏手机的宽度比桌面还大 —— 于是什么都没压，面板连同按钮一起顶到屏幕外面。
+ * 这一档按高度走，把面板里那些写死的 px 整体缩一档：行高、快捷格、边距，以及顶上让出的高度。
+ * 面板高度预算（--wall-tools-panel-chrome）也要跟着改小，否则帮助列表会按桌面那套算出一大块，
+ * 把面板撑出视口。
+ *
+ * 最要紧的是让面板**能被压缩**：基线里它是 flex: none（见文件开头「面板不缩」那条），
+ * 而 stack 是 column-reverse + bottom 定位，内容比可用高度高时只会往屏幕上方溢出，
+ * 顶部那一截（也就是面板的标题和第一批按钮）就整块跑到屏幕外，怎么点都点不到。
+ * 这里改成可压缩 + 自己滚，上下都有界，才算真的收口。
+ *
+ * 每条 max-height 都用 vh 起头再跟一行 dvh：老 WebView 不认 dvh 时前面那行仍然生效。 */
+@media (max-height: 560px) {
+    .lattice-tools {
+        right: 12px;
+        bottom: 12px;
+        --wall-tools-panel-width: min(260px, calc(100vw - 24px));
+        --wall-tools-top-reserve: 20px;
+        --wall-tools-panel-chrome: 190px;
+    }
+
+    .lattice-tools-stack {
+        bottom: 52px;
+        max-height: calc(100vh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve));
+        max-height: calc(100dvh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve));
+    }
+
+    /* 面板「可压缩 + 内部滚动」已经进了基线（见文件开头 .lattice-tools-panel），这里不再重复。
+       这条档只负责把尺寸与预算压下来：上面的 --wall-tools-* 一变，面板那条 max-height 跟着变。 */
+
+    /*
+     * —— 面板与浮岛怎么分这点高度 ——
+     *
+     * 两块玻璃都是 `flex: 0 1 auto`，收缩量按 flex-basis 分摊，于是**内容更长的那块让得更多**：
+     * 面板内容 ~238px，浮岛最多 2 + 36 + 8×40 = 358px。浮岛一路缩到自己那条 112px 下限就顶住
+     * 不动，剩下的缺口全由面板吞 —— 面板顶上那排快捷格（最常用的那一排，最右就是「播放器」）
+     * 于是被自己的 `overflow-y: auto` 裁掉，`elementFromPoint` 打不到，看到的就是
+     * 「面板里的按钮全没了 / 把播放按钮删了」。浮岛只在**队列非空且偏好展开**时出现 ——
+     * 正好对上「选了歌单之后」。
+     *
+     * 无头 Edge 实测（紧凑档、底距 24、顶部让位 20、浮岛满 8 行；可见性按**内容盒**算，
+     * 因为裁的就是那里 —— 判据是元素中心点还能不能被 elementFromPoint 打中）：
+     *   736x248  stack 预算 152 —— 浮岛被 112 钉住，面板只剩 32px / 内容盒 10px：
+     *            快捷排六格 vis=25%、中心点 MISS（点不到）。
+     *   776x268  stack 预算 172 —— 面板 52px / 内容盒 30px：vis=75%，中心点还能打中。
+     * 改后同两档分别变成 66px / 内容盒 44px（六格 100% 可点）与 75px / 53px。
+     *
+     * 改法：不动面板（它本来就该按剩余高度缩），只把**浮岛的下限放松到「头部 + 一行」**——
+     * 浮岛自己有滚动区，矮一点不影响用，腾出来的高度正好够面板放下快捷排。面板那条下限
+     * 是兜底，只在窗口矮到连 60px 都分不出来时才生效。
+     *
+     * 数值来源：ISLAND_BORDER_HEIGHT 2 + ISLAND_HEADER_HEIGHT 36 + QUEUE_ISLAND_ROW_HEIGHT 40 = 78
+     * （WallToolsQueueIsland.tsx / queueDragGeometry.ts）；
+     * 面板 60 = 内边距 10×2 + 边框 1×2 + 快捷格 36 + 间距 2。
+     */
+    .lattice-tools-panel {
+        min-height: 60px;
+    }
+
+    .lattice-tools-stack.has-queue-island .lattice-tools-island {
+        min-height: 78px;
+    }
+
+    /* 快捷排也收一档：它是面板里最该一直看得见的那一排（洗牌 / 主题 / 队列 / 播放器都在这里）。 */
+    .lattice-tools-quick {
+        margin-bottom: 2px;
+    }
+
+    .lattice-tools-quick-action {
+        height: 36px;
+        border-radius: 10px;
+    }
+
+    .lattice-tools-quick-action svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .lattice-tools-action {
+        min-height: 30px;
+        gap: 7px;
+        padding: 0 9px;
+        font-size: 11.5px;
+    }
+
+    .lattice-tools-action svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    /* 帮助列表的预算：桌面那条 max(150px, 100vh - 600px) 在 390px 高的屏上恒等于 150px，
+       比整块可用高度还大 —— 改成跟着剩余高度走，最少留两行。 */
+    .lattice-tools-panel.has-quick-actions .lattice-tools-help ul {
+        max-height: max(56px, calc(100vh - 360px));
+        max-height: max(56px, calc(100dvh - 360px));
+    }
+
+    .lattice-tools-stack.has-queue-island .lattice-tools-panel.has-quick-actions .lattice-tools-help ul {
+        max-height: max(
+            40px,
+            calc(100vh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve)
+                - var(--wall-tools-panel-chrome) - 8px - 112px)
+        );
+        max-height: max(
+            40px,
+            calc(100dvh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve)
+                - var(--wall-tools-panel-chrome) - 8px - 112px)
+        );
+    }
+}
+
+/*
+ * —— 矮而宽：队列浮岛改放面板**左边**，不再摞在它顶上 ——
+ *
+ * 上下摞两块玻璃（column-reverse）时，矮窗口那三百出头的纵向预算要面板和浮岛分：
+ * 浮岛被 flex-shrink 一路压到「头部 + 一行」（78px），播放列表等于看不见。
+ * 横过来的手机横向还剩一大半 —— 并排放之后两块各拿整条高度，浮岛能显示六七行。
+ *
+ * 只在又矮又宽（min-width 600px：两块 260px 玻璃 + 间距 + 右边距要 540px 才放得下）且浮岛
+ * 真开着时改排法；窄的矮窗口维持上下摞（那边缺的是横向）。
+ *
+ * row-reverse：DOM 里面板在前、浮岛在后（Tab 顺序不变），反着排正好面板贴右、浮岛在左，
+ * 两块玻璃底边对齐（stack 本来就 align-items: flex-end）。
+ */
+@media (max-height: 560px) and (min-width: 600px) {
+    .lattice-tools-stack.has-queue-island {
+        flex-direction: row-reverse;
+        align-items: flex-end;
+    }
+
+    /*
+     * 行内摆放时 flex-shrink 压的是**宽度**，管不到高度；浮岛按行数给的高度又是内联 style
+     * （8 行 = 358px，比矮窗的整条预算还高）。好在样式表里的 max-height 照样钳得住内联 height：
+     * 钳住之后列表跟着缩，浮岛里的 ResizeObserver 会把真实高度报给 react-window，滚动照常。
+     * 两条公式与 stack 自己的预算同源（见上面矮屏那一档）；按钮上方还有定位按钮时再让 52px
+     * （116 = 64 + 40 + 12，见 .has-above）。
+     */
+    .lattice-tools-stack.has-queue-island .lattice-tools-island {
+        max-height: calc(100vh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve));
+        max-height: calc(100dvh - var(--wall-tools-bottom, 12px) - 52px - var(--wall-tools-top-reserve));
+    }
+
+    .lattice-tools.has-above .lattice-tools-stack.has-queue-island .lattice-tools-island {
+        max-height: calc(100vh - var(--wall-tools-bottom, 12px) - 116px - var(--wall-tools-top-reserve));
+        max-height: calc(100dvh - var(--wall-tools-bottom, 12px) - 116px - var(--wall-tools-top-reserve));
+    }
+
+    /* 并排之后浮岛不再占面板头顶的纵向，帮助列表的预算不用再扣它那 112px。 */
+    .lattice-tools-stack.has-queue-island .lattice-tools-panel.has-quick-actions .lattice-tools-help ul {
+        max-height: max(56px, calc(100vh - 360px));
+        max-height: max(56px, calc(100dvh - 360px));
+    }
+}

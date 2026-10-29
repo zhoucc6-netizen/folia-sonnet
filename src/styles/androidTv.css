@@ -1,0 +1,39 @@
+/*
+ * Android TV shell.
+ *
+ * Same contract as androidPhoneFit.css: every rule is gated by an attribute on <html>, so a
+ * phone, a tablet and the desktop build are byte-for-byte unaffected. The attribute is written
+ * by services/androidPhoneLayout.applyDeviceProfile — it holds the *resolved* device type, so
+ * a TV nobody has answered the prompt on is already covered.
+ */
+
+/*
+ * 焦点框：电视上唯一能表示「遥控器现在停在哪」的东西。
+ *
+ * 不用 :focus-visible：遥控器没有「上一次是鼠标」这回事，每一次聚焦都该看得见。
+ * 白色 + 3px 是因为电视的画面对比度和观看距离都比显示器差得多，1px 的浅色环在
+ * 1080p 的电视上看不出来。offset 让它不压住控件自己的描边。
+ */
+html[data-folia-device-resolved='tv'] :focus {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/*
+ * 焦点框会被屏幕边缘切掉：浏览器把元素滚进视野时只看元素本身，看不到我们描的这圈边。
+ * 留出余量，焦点落在最上/最下一行时整圈框仍在画面里。
+ */
+html[data-folia-device-resolved='tv'] :focus {
+  scroll-margin-block: 72px;
+  scroll-margin-inline: 72px;
+}
+
+/*
+ * Overscan：一部分电视（尤其中低端）会把画面边缘切掉 3%~5%，1080p 下约 32~54px。
+ * 这里按 5% 留边。挂在 app shell 上而不是 body 上，因为 shell 才是那个铺满整屏、
+ * 内部自己滚动的容器；给 body 加内边距只会把 shell 的 100vh 顶出屏幕外。
+ */
+html[data-folia-device-resolved='tv'] [data-folia-app-shell] {
+  box-sizing: border-box;
+  padding: 3.5vh 3.5vw;
+}

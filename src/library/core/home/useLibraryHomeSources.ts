@@ -1,0 +1,150 @@
+import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import type { HomeViewTab } from '../../../types';
+import type { ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
+import type { LibraryHomeOnlineSource, LibraryHomeTabView } from './homeModel.contract';
+import type { LibraryAccountController } from '../account/account.contract';
+import { isOnlineHomeTab, resolveHomeOnlineSource, resolveHomeTabs, translateHomeTabs } from './homeSources';
+import { resolveActiveProviderSummary } from '../account/accountRules';
+import { readOnlineProviderCapabilities, readOnlineProviderLabel } from './online/onlineHomeProvider.service';
+import {
+    mergeProviderCollections,
+    mergeProviderFeedOwners,
+} from '../collection/onlineProviderScope';
+import { selectIsAllProvidersScope, useLibraryOnlineProviderScopeStore } from '../directory/useLibraryOnlineProviderScopeStore';
+import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
+import { usePersonalFmCatalog } from '../../../hooks/usePersonalFmCatalog';
+import { selectProviderPersonalFm, usePersonalFmModeStore } from '../../../stores/usePersonalFmModeStore';
+import { getLocalLibraryAvailability } from '../../../services/localLibraryAvailability';
+import { getPersonalFmSelectionLabel } from '../../../services/onlineMusic/fmModes';
+import { useLibraryAccountProviders } from '../account/useLibraryAccount';
+
+// src/library/core/home/useLibraryHomeSources.ts
+// 首页的来源与一级页签：当前页签（搜索导航 store 持有）、当前在线来源（provider、账户、能力）、
+// 页签列表与不可用原因（规则在 core/home/homeSources，这里翻译）、私人 FM 卡上显示的当前模式。
+// 只订阅这几样（页签、页签显示开关、FM 模式），别的 store 写入不会让首页重渲染。
+
+export type LibraryHomeSources = {
+    tab: HomeViewTab;
+    setTab: (tab: HomeViewTab) => void;
+    isOnlineTab: boolean;
+    online: LibraryHomeOnlineSource;
+    tabs: LibraryHomeTabView[];
+    /** FM 卡上的当前模式（provider 不支持模式时为空）。 */
+    personalFmModeLabel: string;
+};
+
+export const useLibraryHomeSources = ({
+    account,
+    user,
+    playlists,
+    cloudPlaylist = null,
+    navidromeEnabled = false,
+}: {
+    /** 在线账户 controller：当前平台与它的账户摘要来自快照（未变时身份稳定）。 */
+    account: LibraryAccountController;
+    /** 应用传入的旧账户与歌单（只有网易云在平台还没给出摘要时用）。 */
+    user: ProviderUser | null;
+    playlists: ProviderCollection[];
+    cloudPlaylist?: ProviderCollection | null;
+    navidromeEnabled?: boolean;
+}): LibraryHomeSources => {
+    const { t } = useTranslation();
+    const { tab, setTab } = useSearchNavigationStore(useShallow(state => ({
+        tab: state.homeViewTab,
+        setTab: state.setHomeViewTab,
+    })));
+    const visibility = useHomeLayoutSettingsStore(useShallow(state => ({
+        playlist: state.showHomeTabPlaylist,
+        radio: state.showHomeTabRadio,
+        explore: state.showHomeTabExplore,
+        albums: state.showHomeTabAlbums,
+        local: state.showHomeTabLocal,
+        cloud: state.showHomeTabCloud,
+    })));
+    // The FM card doubles as the mode readout: the card is the only place the current mode shows
+    // up outside the player, and the picker can change it while this grid stays mounted.
+    const { providers, activeProviderId: providerId } = useLibraryAccountProviders(account);
+    // 「全部」：只看首页在线这一屏的数据范围（见 core/directory/useLibraryOnlineProviderScopeStore）。
+    const allProviders = useLibraryOnlineProviderScopeStore(selectIsAllProvidersScope);
+    const catalog = usePersonalFmCatalog(providerId);
+    const personalFmSelection = usePersonalFmModeStore(state => selectProviderPersonalFm(state, providerId));
+    const provider = useMemo(() => resolveActiveProviderSummary(providers, providerId), [providerId, providers]);
+    const capabilities = readOnlineProviderCapabilities(providerId);
+    const { userLibrary, playlists: canListPlaylists, userAlbums, recommendations, personalFmModes, explore } = capabilities;
+    const online = useMemo(() => {
+        const base = resolveHomeOnlineSource({
+            providerId,
+            provider,
+            capabilities: { ...capabilities, userLibrary, playlists: canListPlaylists, userAlbums, recommendations, personalFmModes, explore },
+            fallbackLabel: readOnlineProviderLabel(providerId),
+            fallbackUser: user,
+            fallbackPlaylists: playlists,
+            fallbackCloud: cloudPlaylist,
+            platformAvailable: true,
+        });
+        if (!allProviders) return base;
+        /*
+         * 「全部」：当前平台不变（登录、搜索、播放仍按它走），只有首页这一屏的数据换成各家歌单的合并结果。
+         *
+         * 几处要跟着改，否则合并视图是空的：
+         * - `collections` 换成合并结果（原本只给当前平台自己的）；
+         * - `canUsePlaylists` / `canUseAlbums` / `canUseRadio` 按合并结果判：它们原本是**当前平台**
+         *   的能力，当前平台恰好不支持时，页签会显示「该平台不支持」并把合并结果藏掉 —— 而合起来
+         *   明明有东西；
+         * - `accountView` 同理：当前平台没登录时它是 guest，墙会整个空着、只剩登录入口，
+         *   而别的平台是登录着的。合并出东西了就按「有内容」显示（登录入口仍在缝里的账户位上）。
+         */
+        const merged = mergeProviderCollections(providers);
+        /*
+         * 收藏专辑与电台跟歌单一样要合并：只换 collections 的话，这两份数据还按「当前平台」
+         * 去读 —— 当前这家居然不支持（或没登录）时，专辑与电台两个页签就是空的，明明别的平台
+         * 是登录着的。所以这里把各家（已登录、且这项真的支持）算成归属交给两份资源，由它们
+         * 一家一家问过去再合起来。
+         */
+        const feedOwners = mergeProviderFeedOwners(providers, id => readOnlineProviderCapabilities(id));
+        return {
+            ...base,
+            collections: merged,
+            canUsePlaylists: merged.length > 0,
+            canUseAlbums: (feedOwners.albums?.length ?? 0) > 0,
+            canUseRadio: (feedOwners.radio?.length ?? 0) > 0,
+            feedOwners,
+            ...(merged.length > 0 ? { accountView: 'authenticated' as const, providerLabel: t('home.allProviders') } : {}),
+        };
+    }, [
+        // capabilities 每次读都是新对象：按用到的几个开关比较。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        allProviders, canListPlaylists, cloudPlaylist, explore, personalFmModes, playlists, provider, providers, providerId,
+        recommendations, t, user, userAlbums, userLibrary,
+    ]);
+
+    // The explore tab is gone after a switch to a provider without one, and a stored choice of it
+    // may be older than the switch.
+    useEffect(() => {
+        if (tab === 'explore' && !online.canUseExplore) setTab('playlist');
+    }, [online.canUseExplore, setTab, tab]);
+
+    const localAvailability = getLocalLibraryAvailability();
+    const tabs = useMemo(() => translateHomeTabs(resolveHomeTabs({
+        visibility,
+        navidromeEnabled,
+        online,
+        localAvailability: { supported: localAvailability.supported, reason: localAvailability.reason },
+    }), t), [localAvailability.reason, localAvailability.supported, navidromeEnabled, online, t, visibility]);
+
+    const personalFmModeLabel = online.hasPersonalFmModes
+        ? getPersonalFmSelectionLabel(personalFmSelection, (key, fallback) => t(key, fallback ?? ''), catalog)
+        : '';
+
+    return {
+        tab,
+        setTab,
+        isOnlineTab: isOnlineHomeTab(tab),
+        online,
+        tabs,
+        personalFmModeLabel,
+    };
+};

@@ -1,0 +1,196 @@
+import { Hono } from 'hono';
+import type { Context, MiddlewareHandler, Next } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import type { Env } from './app.js';
+
+// src/admin.ts
+// The panel uses explicitly configured credentials and revocable database sessions.
+// A credential tag binds each session to the operator configuration without storing its password.
+
+export type AdminEnv = { Bindings: Env };
+type AdminContext = Context<AdminEnv>;
+
+export const ADMIN_COOKIE = 'folia_admin_session';
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_RENEW_BELOW_MS = 10 * 60 * 60 * 1000;
+
+type AdminCredentials = { username: string; password: string };
+type AdminCredentialEnv = { ADMIN_USERNAME?: string; ADMIN_PASSWORD?: string };
+
+export interface AdminSessionRow {
+    token: string;
+    username: string;
+    created_at: string;
+    expires_at: string;
+    credential_tag: string | null;
+}
+
+/** No built-in account: missing or weak configuration disables admin access. */
+export const readAdminCredentials = (env: AdminCredentialEnv): AdminCredentials | null => {
+    const username = String(env.ADMIN_USERNAME ?? '').trim();
+    const password = String(env.ADMIN_PASSWORD ?? '');
+    if (!username || password.trim().length < 16) return null;
+    return { username, password };
+};
+
+/** Only explicit operator configuration may override the request origin behind a reverse proxy. */
+export const readAdminPublicOrigin = (c: AdminContext): string | null => {
+    const configured = c.env.ADMIN_PUBLIC_ORIGIN;
+    if (configured === undefined || configured === '') return new URL(c.req.url).origin;
+    try {
+        const url = new URL(configured);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password
+            || url.pathname !== '/' || url.search || url.hash) return null;
+        return url.origin;
+    } catch {
+        return null;
+    }
+};
+
+/** Reject browser mutations from other origins, including form submissions. */
+export const isSameOriginAdminMutation = (c: AdminContext): boolean => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return true;
+    const expectedOrigin = readAdminPublicOrigin(c);
+    if (!expectedOrigin) return false;
+    const origin = c.req.header('Origin');
+    if (origin && origin !== expectedOrigin) return false;
+    return c.req.header('Sec-Fetch-Site') !== 'cross-site';
+};
+
+const credentialTag = async (credentials: AdminCredentials): Promise<string> => {
+    const data = new TextEncoder().encode(JSON.stringify([credentials.username, credentials.password]));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const newToken = (): string => {
+    const cryptoRef = globalThis.crypto as Crypto | undefined;
+    if (cryptoRef?.getRandomValues) {
+        const bytes = new Uint8Array(32);
+        cryptoRef.getRandomValues(bytes);
+        return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    }
+    throw new Error('secure_random_unavailable');
+};
+
+const readSessionRow = async (db: Env['FOLIA_SYNC_DB'], token: string): Promise<AdminSessionRow | null> => {
+    if (!token) return null;
+    const row = await db
+        .prepare('SELECT token, username, created_at, expires_at, credential_tag FROM admin_sessions WHERE token = ?')
+        .bind(token)
+        .first<AdminSessionRow>();
+    if (!row?.expires_at) return null;
+    const expiresAt = Date.parse(row.expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        await db.prepare('DELETE FROM admin_sessions WHERE token = ?').bind(token).run();
+        return null;
+    }
+    return row;
+};
+
+/** A session is valid only for the currently configured username and password. */
+export const readAdminSession = async (c: AdminContext): Promise<string | null> => {
+    const credentials = readAdminCredentials(c.env);
+    if (!credentials) return null;
+    const token = getCookie(c, ADMIN_COOKIE);
+    if (!token) return null;
+    const row = await readSessionRow(c.env.FOLIA_SYNC_DB, token);
+    if (!row) return null;
+    if (row.username !== credentials.username || row.credential_tag !== await credentialTag(credentials)) {
+        await destroyAdminSession(c.env.FOLIA_SYNC_DB, token);
+        return null;
+    }
+    return row.username;
+};
+
+const sessionCookieOptions = (c: AdminContext) => ({
+    httpOnly: true,
+    sameSite: 'Lax' as const,
+    path: '/',
+    // Local HTTP remains supported; public deployments must terminate HTTPS.
+    secure: readAdminPublicOrigin(c)?.startsWith('https:') ?? false,
+    maxAge: Math.floor(SESSION_TTL_MS / 1000),
+});
+
+/** Sliding expiry renews only a session that still belongs to the current credentials. */
+export const touchAdminSession = async (c: AdminContext): Promise<void> => {
+    if (!await readAdminSession(c)) return;
+    const token = getCookie(c, ADMIN_COOKIE)!;
+    const row = await readSessionRow(c.env.FOLIA_SYNC_DB, token);
+    if (!row) return;
+    if (Date.parse(row.expires_at) - Date.now() > SESSION_RENEW_BELOW_MS) return;
+    await c.env.FOLIA_SYNC_DB
+        .prepare('UPDATE admin_sessions SET expires_at = ? WHERE token = ? AND credential_tag = ?')
+        .bind(new Date(Date.now() + SESSION_TTL_MS).toISOString(), token, row.credential_tag)
+        .run();
+    setCookie(c, ADMIN_COOKIE, token, sessionCookieOptions(c));
+};
+
+/** Gate for every /admin/api/* route. */
+export const requireAdmin: MiddlewareHandler<AdminEnv> = async (c, next: Next) => {
+    c.header('Cache-Control', 'no-store');
+    if (!readAdminCredentials(c.env)) return c.json({ ok: false, error: 'admin_not_configured' }, 503);
+    if (!isSameOriginAdminMutation(c)) return c.json({ ok: false, error: 'invalid_origin' }, 403);
+    if (!await readAdminSession(c)) return c.json({ ok: false, error: 'unauthorized' }, 401);
+    await next();
+};
+
+/** Cheap housekeeping: expired rows are swept whenever the panel is opened. */
+export const pruneExpiredSessions = async (db: Env['FOLIA_SYNC_DB']): Promise<void> => {
+    await db.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?')
+        .bind(new Date().toISOString())
+        .run();
+};
+
+export const createAdminSession = async (db: Env['FOLIA_SYNC_DB'], credentials: AdminCredentials): Promise<string> => {
+    const token = newToken();
+    const now = new Date().toISOString();
+    await db
+        .prepare('INSERT INTO admin_sessions (token, username, created_at, expires_at, credential_tag) VALUES (?, ?, ?, ?, ?)')
+        .bind(token, credentials.username, now, new Date(Date.now() + SESSION_TTL_MS).toISOString(), await credentialTag(credentials))
+        .run();
+    return token;
+};
+
+export const destroyAdminSession = async (db: Env['FOLIA_SYNC_DB'], token: string): Promise<void> => {
+    if (!token) return;
+    await db.prepare('DELETE FROM admin_sessions WHERE token = ?').bind(token).run();
+};
+
+const admin = new Hono<AdminEnv>();
+
+admin.post('/login', async (c) => {
+    let username = '';
+    let password = '';
+    const contentType = String(c.req.header('Content-Type') || '');
+    if (contentType.includes('application/json')) {
+        const body = await c.req.json<{ username?: unknown; password?: unknown }>().catch(() => null);
+        username = String(body?.username ?? '');
+        password = String(body?.password ?? '');
+    } else {
+        const form = await c.req.parseBody().catch(() => null) as Record<string, unknown> | null;
+        username = String(form?.username ?? '');
+        password = String(form?.password ?? '');
+    }
+    const expected = readAdminCredentials(c.env);
+    if (!expected) return c.json({ ok: false, error: 'admin_not_configured' }, 503);
+    if (username.trim() !== expected.username || password !== expected.password) {
+        return c.json({ ok: false, error: 'invalid_credentials' }, 401);
+    }
+    const token = await createAdminSession(c.env.FOLIA_SYNC_DB, expected);
+    setCookie(c, ADMIN_COOKIE, token, sessionCookieOptions(c));
+    return c.json({ ok: true, username: expected.username, usingDefault: false });
+});
+
+admin.post('/logout', async (c) => {
+    await destroyAdminSession(c.env.FOLIA_SYNC_DB, getCookie(c, ADMIN_COOKIE) || '');
+    deleteCookie(c, ADMIN_COOKIE, { path: '/' });
+    return c.json({ ok: true });
+});
+
+admin.get('/session', async (c) => {
+    const username = await readAdminSession(c);
+    return c.json({ ok: true, signedIn: Boolean(username), username, usingDefault: false });
+});
+
+export default admin;
