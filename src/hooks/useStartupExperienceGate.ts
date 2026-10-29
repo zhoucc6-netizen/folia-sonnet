@@ -4,6 +4,7 @@ import { hasOnboardingLibrarySuiteChoice } from '../library/app/librarySuiteChoi
 import { requestPlaybackEntryViewPrompt, usePlaybackEntryViewStore } from '../stores/usePlaybackEntryViewStore';
 import { useSettingsModalStore } from '../stores/useSettingsModalStore';
 import { useDeviceProfileStore } from '../stores/useDeviceProfileStore';
+import { resolveDeviceType } from '../services/androidPhoneLayout';
 import { isAndroidNativeRuntime } from '../services/nativeLocalMusic';
 
 // src/hooks/useStartupExperienceGate.ts
@@ -134,7 +135,17 @@ export const useStartupExperienceGate = (
     const hasSeenLibrarySuitePrompt = usePlaybackEntryViewStore(state => state.hasSeenLibrarySuitePrompt);
     const needsLibrarySuitePrompt = hasOnboardingLibrarySuiteChoice() && !hasSeenLibrarySuitePrompt;
     const hasAnsweredDeviceType = useDeviceProfileStore(state => state.hasAnsweredDeviceType);
-    const needsDeviceTypePrompt = isAndroidNativeRuntime() && !hasAnsweredDeviceType;
+    const deviceProfile = useDeviceProfileStore(state => state.deviceType);
+    /*
+     * 电视不问「这是手机还是平板」。
+     *
+     * 那一页问的是「横屏要不要缩一档」，电视上早就知道答案（不缩、而且根本不存在手机那种窄屏），
+     * 问了也只能选错。更要紧的是它属于首启的阻塞页：一页过不去，整个 App 就进不了主界面 ——
+     * 遥控器操作稍有不顺就卡死在这里。
+     */
+    const needsDeviceTypePrompt = isAndroidNativeRuntime()
+        && !hasAnsweredDeviceType
+        && resolveDeviceType(deviceProfile) !== 'tv';
     const isPlaybackEntryViewPromptOpen = usePlaybackEntryViewStore(state => state.isPlaybackEntryViewPromptOpen);
     const [lastSeenReleaseNotesVersion, setLastSeenReleaseNotesVersion] = useState(readLastSeenReleaseNotesVersion);
     const [hasSeenFreeSoftwareNotice, setHasSeenFreeSoftwareNotice] = useState(readHasSeenFreeSoftwareNotice);

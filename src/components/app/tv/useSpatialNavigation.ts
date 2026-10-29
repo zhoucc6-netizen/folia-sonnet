@@ -215,6 +215,28 @@ const isInsideSeam = (): boolean => {
     return active instanceof HTMLElement && active.closest('[data-bravais-seam]') !== null;
 };
 
+/**
+ * 弹窗打开但没有任何元素带焦点时，把焦点放到它的主按钮上。
+ *
+ * 为什么需要：一个弹窗关掉、下一个立刻打开（首启那串引导就是这样），焦点会掉到 body。
+ * 此时按「确定」什么都不发生 —— 用户看到的是「按钮按了没反应」，而这恰恰发生在开局，
+ * 直接卡死进不去主界面。先落到主按钮（下一步 / 确认），焦点框就出现了，再按一下才激活。
+ *
+ * 只落焦点、不替用户按下去：这些弹窗里有「关闭」和「我服了」这种语义完全不同的按钮，
+ * 替用户点一下的代价太大。
+ */
+const bootstrapDialogFocus = (): boolean => {
+    const scope = resolveScope();
+    if (scope === document.body) return false;
+    const primary = scope.querySelector<HTMLElement>('[data-testid$="-confirm"], [data-testid$="-next"]');
+    const fallback = scope.querySelector<HTMLElement>(CANDIDATE_SELECTOR);
+    const target = primary ?? fallback;
+    if (!target || !isReachable(target)) return false;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    return true;
+};
+
 /** 电视态下接管方向键。非电视设备上是空操作。 */
 export const useSpatialNavigation = (): void => {
     const deviceType = useDeviceProfileStore(state => state.deviceType);
@@ -250,6 +272,34 @@ export const useSpatialNavigation = (): void => {
                     return;
                 }
                 event.preventDefault();
+                return;
+            }
+
+            /*
+             * 遥控器的「确定」键。
+             *
+             * 遥控器发的是 DPAD_CENTER，WebView 把它翻成 Enter 之后、要不要对当前聚焦的按钮合成
+             * 一次 click 由平台决定 —— 实测有的电视上不合成，表现是「焦点框能走，按下没有任何反应」，
+             * 首启那种阻塞页因此直接卡死。这里自己激活一次。
+             *
+             * preventDefault 掐掉浏览器可能已经要做的默认激活，所以无论平台合不合成，都只触发一次。
+             * 只认按钮一类元素：焦点在 listbox / 输入框上时，Enter 是它们自己的语义（选行、提交），
+             * 交给原来的处理者，不能在这里抢。
+             */
+            if (effectiveKeyCode(event) === 'Enter') {
+                const focused = document.activeElement;
+                const buttonLike = focused instanceof HTMLElement && (
+                    focused.tagName === 'BUTTON'
+                    || focused.tagName === 'A'
+                    || focused.getAttribute('role') === 'button'
+                );
+                if (buttonLike && focused instanceof HTMLElement) {
+                    event.preventDefault();
+                    focused.click();
+                    return;
+                }
+                // 焦点掉在 body 上、又有弹窗开着：先把焦点落到它的主按钮，这一下不算激活。
+                if (bootstrapDialogFocus()) event.preventDefault();
                 return;
             }
 
