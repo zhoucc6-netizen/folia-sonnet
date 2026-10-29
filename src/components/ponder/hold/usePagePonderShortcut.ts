@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { usePonderStore } from '../../../stores/usePonderStore';
+import { useDeviceProfileStore } from '../../../stores/useDeviceProfileStore';
+import { resolveDeviceType } from '../../../services/androidPhoneLayout';
 import { openCurrentPagePonder, readCurrentPagePonderTarget } from '../../../services/ponder/pagePonderTarget';
 import type { PonderTargetId } from '../../../types/ponder';
 import { effectiveKeyCode, isKeyCaptureTarget } from '../../../utils/keyboardTargets';
@@ -13,6 +15,10 @@ import { usePonderHold } from './usePonderHold';
 // 触发感受 —— 一边要按住看擦除走满，一边一按就进。统一成长按之后，用户学会的是一件事。
 //
 // @note Ctrl+G 是页面级的，输入框（含命令面板搜索框）里也照常生效，所以不做文本目标判断。
+//
+// 电视上这条入口不存在：遥控器没有 Ctrl 也没有 G（见海信那类遥控器，只有方向、确定、返回、
+// 菜单、设置、主页、音量）。留着的唯一效果是提示胶囊在电视上教用户按一个按不到的键，所以按
+// 设备类型关掉；桌面与手机不受影响。
 
 export type PagePonderShortcutState = {
     /** 正在按住 Ctrl+G。提示胶囊靠它决定要不要出现。 */
@@ -28,9 +34,10 @@ export type PagePonderShortcutState = {
 
 export const usePagePonderShortcut = (refs: PonderHoldProgressRefs): PagePonderShortcutState => {
     const [targetId, setTargetId] = useState<PonderTargetId | null>(null);
+    const deviceType = useDeviceProfileStore(state => state.deviceType);
 
     const isHolding = usePonderHold({
-        enabled: true,
+        enabled: resolveDeviceType(deviceType) !== 'tv',
         accepts: event => (
             // 软件注入的按键 event.code 为空，按 key 认。
             effectiveKeyCode(event) === 'KeyG'

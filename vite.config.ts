@@ -276,7 +276,15 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
         // extracting Electron into release/win-unpacked.tmp and renaming it to release/win-unpacked.
         // On Windows that rename fails with EPERM while anything holds the directory - so a dev
         // server left running in another terminal kills every `npm run build:electron`.
-        ignored: ['**/release/**', '**/models/**'],
+        //
+        // `**/*.tmpdir/**` 是同一个道理的另一半，只是后果更直接：编辑器的原子保存（写临时目录
+        // 再改名）会在源码树里留下 `.<name>.<pid>.<uuid>.tmpdir/`，watcher 去 watch 那个临时文件
+        // 的时候文件已经改名没了，Windows 上直接抛 EBUSY，**整个 dev server 进程退出**。
+        // 实测 VS Code 与自动化改写都会触发。
+        //
+        // `**/android/**` 是 Capacitor 的原生工程：cap sync 与 gradle 会在里面反复写构建产物，
+        // 改一次 AndroidManifest 就能让 watcher 撞上同样的 EBUSY。
+        ignored: ['**/release/**', '**/models/**', '**/android/**', '**/*.tmpdir/**'],
       },
     },
     plugins: [
