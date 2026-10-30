@@ -151,7 +151,14 @@ const postMusicu = async (body, timeout = 15000) => {
   const globalCode = Number(json?.code ?? 0);
   const upstreamCode = Number(item?.code ?? 0);
   if (!item || globalCode !== 0 || upstreamCode !== 0 || !item.data) {
-    const error = new Error(`QQ app QR: musicu rejected (upstream ${item?.code ?? 'unknown'}, global ${json?.code ?? 'unknown'})`);
+    /*
+     * 20279 是 QQ 音乐账号的**登录设备数已达上限**（与 qqProvider 的 QQ_DEVICE_LIMIT_UPSTREAM_CODE
+     * 同一条判定）。桌面端那条路能把它翻成人话，安卓走的是这里，只有原始码 —— 用户在电视上看到的
+     * 就是一句 `musicu rejected (upstream 20279, global 0)`，既不知道发生了什么，也不知道该做什么。
+     */
+    const error = new Error(upstreamCode === 20279
+      ? '登录设备数已达上限：请先在 QQ 音乐 App 的「设置 → 账号与安全 → 设备管理」里移除一台设备，再重新扫码'
+      : `QQ app QR: musicu rejected (upstream ${item?.code ?? 'unknown'}, global ${json?.code ?? 'unknown'})`);
     error.upstreamCode = Number.isFinite(upstreamCode) ? upstreamCode : undefined;
     error.globalCode = Number.isFinite(globalCode) ? globalCode : undefined;
     throw error;
