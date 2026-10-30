@@ -65,6 +65,16 @@ jobs:
       - name: Build web assets and sync to Android
         run: npm run cap:sync:android
 
+      # 电视的布局宽度必须在**打包时**钉死，不能靠运行时改 viewport。
+      # 实测：页面里那段按 UA 改 meta 的脚本确实执行了（包里能搜到），但安卓 WebView 的初始缩放
+      # 只在首次解析 viewport 时算一次，改完不重新布局 —— 角标仍然报 960×540。
+      #
+      # 电视按 density 2.0 报，1080p 面板的 CSS 视口只有 960×540；这套界面是按桌面 1920 设计的。
+      # 写成 width=1920 之后浏览器按 960/1920 算出 0.5 的初始缩放，页面拿回 1920 的布局空间，
+      # 物理面板正好 1920，缩完 1:1 落在物理像素上。
+      - name: Pin TV layout width to 1920
+        run: node scripts/force-tv-viewport.mjs
+
       # 固定签名：配了 secrets 就用同一把钥匙签调试包，于是后续版本能直接覆盖升级
       # （CI 每次临时生成的调试密钥都不一样，会导致每装一次都要先卸载、数据全清）。
       # 没配也不 fail，只是会警告，仍用 AGP 自动生成的调试密钥。
